@@ -328,8 +328,10 @@
         .leaderboard { top: calc(max(env(safe-area-inset-top, 0px), 16px) + 56px); }
       }
       @media (max-width: 480px) {
-        .leaderboard { width: 156px; padding: 8px 10px; font-size: 12px; }
-        .lb-flag { font-size: 14px; }
+        /* Hide the live HUD leaderboard on phones — it crowds the playfield.
+           Players still see the full leaderboard (and their country) on the
+           game-over card. */
+        .leaderboard { display: none; }
         .stat { padding: 7px 11px; font-size: 12px; }
         .stat-headers { font-size: 18px; }
         .country-header { padding: 7px 14px; gap: 10px; }
