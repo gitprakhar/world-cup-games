@@ -360,8 +360,17 @@
         .leaderboard { top: calc(max(env(safe-area-inset-top, 0px), 16px) + 56px); }
       }
       @media (max-width: 480px) {
-        .leaderboard { width: 156px; padding: 8px 10px; font-size: 12px; }
-        .lb-flag { font-size: 14px; }
+        .leaderboard {
+          width: 120px;
+          max-height: 52vh;
+          padding: 6px 7px 5px;
+          font-size: 10px;
+          border-radius: 9px;
+        }
+        .lb-title { font-size: 8px; margin-bottom: 2px; }
+        .lb-row { grid-template-columns: 12px 16px 1fr auto; gap: 4px; padding: 2px 1px; }
+        .lb-rank { font-size: 9px; }
+        .lb-flag { font-size: 12px; }
         .stat { padding: 7px 11px; font-size: 12px; }
         .stat-touches { font-size: 18px; }
         .country-header { padding: 7px 14px; gap: 10px; }
