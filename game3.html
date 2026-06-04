@@ -430,6 +430,58 @@
       };
       const DEFAULT_KIT = { jersey: "#c5221c", shadow: "#7d1612", collar: "#0e0e0e", trim: "#f5efe1" };
 
+      // Stadium backdrops — one is picked at random each run. Each theme just
+      // recolours the shared scene (sky gradient, sun/moon + halo, clouds,
+      // floodlight glow, grass, horizon haze). stars=true scatters a starfield.
+      const THEMES = [
+        {
+          name: "Golden hour",
+          sky: [[0, "#162247"], [0.4, "#3a2d62"], [0.75, "#c4633a"], [1, "#f0a560"]],
+          celestial: "#fff0c8",
+          halo: [[0, "rgba(255,225,165,0.7)"], [0.35, "rgba(255,170,110,0.22)"], [1, "rgba(255,150,100,0)"]],
+          cloud: "rgba(255,205,175,0.32)",
+          lampGlow: "rgba(255,240,200,0.6)",
+          grass: ["#4d8554", "#386841", "#1d4326"],
+          haze: "rgba(255,200,150,0.4)",
+          stars: false,
+        },
+        {
+          name: "Clear day",
+          sky: [[0, "#2b6fc4"], [0.5, "#5fa3e0"], [1, "#cfe9f7"]],
+          celestial: "#fffbe8",
+          halo: [[0, "rgba(255,250,220,0.85)"], [0.3, "rgba(255,245,200,0.25)"], [1, "rgba(255,245,200,0)"]],
+          cloud: "rgba(255,255,255,0.7)",
+          lampGlow: "rgba(255,250,230,0.25)",
+          grass: ["#5aa45f", "#3f7a48", "#256b32"],
+          haze: "rgba(220,240,255,0.35)",
+          stars: false,
+        },
+        {
+          name: "Night match",
+          sky: [[0, "#05060f"], [0.5, "#0b1430"], [1, "#16284f"]],
+          celestial: "#eef1ff",
+          halo: [[0, "rgba(220,228,255,0.55)"], [0.4, "rgba(150,170,230,0.15)"], [1, "rgba(150,170,230,0)"]],
+          cloud: "rgba(120,140,180,0.16)",
+          lampGlow: "rgba(255,250,225,0.95)",
+          grass: ["#2f6b3e", "#235233", "#13301d"],
+          haze: "rgba(180,200,255,0.3)",
+          stars: true,
+        },
+        {
+          name: "Dusk",
+          sky: [[0, "#1a1033"], [0.45, "#4a2a6b"], [0.8, "#a14a7a"], [1, "#e89a8a"]],
+          celestial: "#ffe0d0",
+          halo: [[0, "rgba(255,210,200,0.6)"], [0.35, "rgba(220,140,170,0.2)"], [1, "rgba(220,140,170,0)"]],
+          cloud: "rgba(255,200,220,0.3)",
+          lampGlow: "rgba(255,235,225,0.7)",
+          grass: ["#487d52", "#356040", "#1d4326"],
+          haze: "rgba(255,190,210,0.38)",
+          stars: false,
+        },
+      ];
+      let bgTheme = THEMES[0];
+      let stars = []; // {x, y, r} in screen px — regenerated per run / resize
+
       // Session state.
       let playerCountry = "MX";
       let headers = 0;   // successful headers this run
@@ -605,6 +657,7 @@
         canvas.style.height = H + "px";
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         groundY = H * GROUND_FRAC;
+        if (bgTheme.stars) seedStars();
         // Keep the player on-screen if the window shrank.
         player.x = Math.max(40, Math.min(W - 40, player.x || W / 2));
         if (!alive) {
@@ -629,9 +682,30 @@
         ball.vSpin = 0;
       }
 
+      // Lay out a starfield for the current viewport (only used by night).
+      function seedStars() {
+        const count = Math.round((W * groundY) / 14000);
+        stars = [];
+        for (let i = 0; i < count; i++) {
+          stars.push({
+            x: Math.random() * W,
+            y: Math.random() * groundY * 0.8,
+            r: Math.random() < 0.85 ? 0.8 : 1.5,
+          });
+        }
+      }
+
+      // Pick a random backdrop for this run.
+      function pickTheme() {
+        bgTheme = THEMES[Math.floor(Math.random() * THEMES.length)];
+        if (bgTheme.stars) seedStars();
+        else stars = [];
+      }
+
       function startGame() {
         setHeaders(0);
         resetForRun();
+        pickTheme();
         // Recapture the resting tilt angle so however the phone is held now
         // becomes centre for this run.
         tiltZero = null;
@@ -794,33 +868,38 @@
       // Stadium scene at golden hour. Rebuilt every frame — cheap at 60fps
       // and sidesteps any cache invalidation work on resize.
       function drawBackground() {
-        // SKY
+        // SKY — gradient stops come from the active theme.
         const sky = ctx.createLinearGradient(0, 0, 0, groundY);
-        sky.addColorStop(0, "#162247");
-        sky.addColorStop(0.4, "#3a2d62");
-        sky.addColorStop(0.75, "#c4633a");
-        sky.addColorStop(1, "#f0a560");
+        for (const [stop, color] of bgTheme.sky) sky.addColorStop(stop, color);
         ctx.fillStyle = sky;
         ctx.fillRect(0, 0, W, groundY);
 
-        // SUN + warm halo
+        // STARS — night theme only.
+        if (stars.length) {
+          ctx.fillStyle = "rgba(255,255,255,0.85)";
+          for (const s of stars) {
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+
+        // SUN / MOON + halo
         const sunX = W * 0.72;
         const sunY = groundY - H * 0.12;
         const sunR = Math.min(W, H) * 0.045;
         const halo = ctx.createRadialGradient(sunX, sunY, sunR * 0.5, sunX, sunY, sunR * 8);
-        halo.addColorStop(0, "rgba(255, 225, 165, 0.7)");
-        halo.addColorStop(0.35, "rgba(255, 170, 110, 0.22)");
-        halo.addColorStop(1, "rgba(255, 150, 100, 0)");
+        for (const [stop, color] of bgTheme.halo) halo.addColorStop(stop, color);
         ctx.fillStyle = halo;
         ctx.fillRect(0, 0, W, groundY);
-        ctx.fillStyle = "#fff0c8";
+        ctx.fillStyle = bgTheme.celestial;
         ctx.beginPath();
         ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2);
         ctx.fill();
 
         // CLOUDS
         function cloud(cx, cy, sz) {
-          ctx.fillStyle = "rgba(255, 205, 175, 0.32)";
+          ctx.fillStyle = bgTheme.cloud;
           ctx.beginPath();
           ctx.ellipse(cx - sz * 0.45, cy, sz * 0.4, sz * 0.18, 0, 0, Math.PI * 2);
           ctx.ellipse(cx, cy - sz * 0.06, sz * 0.5, sz * 0.22, 0, 0, Math.PI * 2);
@@ -866,8 +945,8 @@
           ctx.stroke();
           const ly = groundY - 50 - h;
           const lampGlow = ctx.createRadialGradient(x, ly, 0, x, ly, 32);
-          lampGlow.addColorStop(0, "rgba(255, 240, 200, 0.6)");
-          lampGlow.addColorStop(1, "rgba(255, 240, 200, 0)");
+          lampGlow.addColorStop(0, bgTheme.lampGlow);
+          lampGlow.addColorStop(1, bgTheme.lampGlow.replace(/[\d.]+\)$/, "0)"));
           ctx.fillStyle = lampGlow;
           ctx.beginPath();
           ctx.arc(x, ly, 32, 0, Math.PI * 2);
@@ -880,16 +959,16 @@
 
         // Horizon haze — sells the stadium-meets-pitch depth.
         const haze = ctx.createLinearGradient(0, groundY - 10, 0, groundY + 4);
-        haze.addColorStop(0, "rgba(255, 200, 150, 0)");
-        haze.addColorStop(1, "rgba(255, 200, 150, 0.4)");
+        haze.addColorStop(0, bgTheme.haze.replace(/[\d.]+\)$/, "0)"));
+        haze.addColorStop(1, bgTheme.haze);
         ctx.fillStyle = haze;
         ctx.fillRect(0, groundY - 10, W, 14);
 
         // GRASS + mowing stripes from a vanishing point above.
         const grass = ctx.createLinearGradient(0, groundY, 0, H);
-        grass.addColorStop(0, "#4d8554");
-        grass.addColorStop(0.5, "#386841");
-        grass.addColorStop(1, "#1d4326");
+        grass.addColorStop(0, bgTheme.grass[0]);
+        grass.addColorStop(0.5, bgTheme.grass[1]);
+        grass.addColorStop(1, bgTheme.grass[2]);
         ctx.fillStyle = grass;
         ctx.fillRect(0, groundY, W, H - groundY);
         const vpX = W * 0.5;
