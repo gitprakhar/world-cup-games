@@ -413,6 +413,23 @@
         COUNTRIES.map(([code, , , seed]) => [code, seed])
       );
 
+      // Football kits per country — fed straight into drawPlayer's flat
+      // palette. jersey = base plane, shadow = the cubist right-side break
+      // (a darker shade of the base), collar + trim = the accent bands.
+      const KITS = {
+        MX: { jersey: "#00713a", shadow: "#004f29", collar: "#0a0a0a", trim: "#f5efe1" },
+        CO: { jersey: "#fcd116", shadow: "#c9a50f", collar: "#00338d", trim: "#ce1126" },
+        PE: { jersey: "#f5efe1", shadow: "#cfc9bd", collar: "#d91023", trim: "#d91023" },
+        CL: { jersey: "#da291c", shadow: "#9e1d14", collar: "#0033a0", trim: "#f5efe1" },
+        AR: { jersey: "#75aadb", shadow: "#4f86bd", collar: "#f5efe1", trim: "#f5efe1" },
+        BR: { jersey: "#ffdf00", shadow: "#d4b800", collar: "#009c3b", trim: "#009c3b" },
+        US: { jersey: "#f5efe1", shadow: "#cfc9bd", collar: "#0a3161", trim: "#b31942" },
+        ES: { jersey: "#c60b1e", shadow: "#8e0815", collar: "#ffc400", trim: "#ffc400" },
+        PH: { jersey: "#0038a8", shadow: "#00276f", collar: "#ce1126", trim: "#fcd116" },
+        IN: { jersey: "#0090d0", shadow: "#0066a0", collar: "#ff9933", trim: "#ff9933" },
+      };
+      const DEFAULT_KIT = { jersey: "#c5221c", shadow: "#7d1612", collar: "#0e0e0e", trim: "#f5efe1" };
+
       // Session state.
       let playerCountry = "MX";
       let headers = 0;   // successful headers this run
@@ -900,8 +917,8 @@
       // Cubist / flat-illustration player: limited palette, hard-edged
       // planes, no gradients. The face is split into a lit half (warm
       // off-white) and a shadow half (cool grey), with a heavy brow and an
-      // angular nose. Red jersey with black collar + white trim + black
-      // belt echoes the reference.
+      // angular nose. The jersey (base + shadow plane, collar, trim, belt)
+      // is coloured from the selected country's kit — see KITS.
       function drawPlayer() {
         const px = player.x;
         const feetY = groundY;
@@ -914,10 +931,12 @@
         const SKIN_SHADOW = "#7d7872";
         const HAIR = "#a8a8a2";
         const BROW = "#161616";
-        const JERSEY = "#c5221c";
-        const JERSEY_SHADOW = "#7d1612";
-        const COLLAR = "#0e0e0e";
-        const TRIM = "#f5efe1";
+        // Jersey colours follow the selected country's kit.
+        const kit = KITS[playerCountry] || DEFAULT_KIT;
+        const JERSEY = kit.jersey;
+        const JERSEY_SHADOW = kit.shadow;
+        const COLLAR = kit.collar;
+        const TRIM = kit.trim;
         const LEG = "#161821";
 
         // Drop shadow under the feet.
