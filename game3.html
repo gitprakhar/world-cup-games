@@ -372,7 +372,7 @@
         <div id="lb-rows"></div>
       </div>
 
-      <div class="hint" id="hint">Move with ← → / mouse / touch — keep the ball on your head</div>
+      <div class="hint" id="hint">Tilt your phone (or ← → / mouse / touch) — keep the ball on your head</div>
 
       <div class="gameover" id="gameover" hidden>
         <div class="gameover-card">
@@ -547,6 +547,9 @@
       const SIDE_RESTITUTION = 0.78;     // bounce energy retained off side walls
       const PLAYER_KEYBOARD_SPEED = 540; // px/s — keyboard movement
       const POINTER_LERP = 14;           // smoothing factor for mouse/touch follow
+      const TILT_MAX_SPEED = 640;        // px/s — speed at full tilt
+      const TILT_FULL_DEG = 22;          // tilt angle (deg from rest) for full speed
+      const TILT_DEADZONE_DEG = 2.5;     // ignore tiny wobble so the player holds still
       const GROUND_FRAC = 0.78;          // grass starts at this fraction of viewport height
       const BALL_RADIUS = 22;
       const HEAD_RADIUS = 19;
@@ -566,7 +569,14 @@
       // wins, so swapping mid-game (touch → mouse → arrow keys) just works.
       const keys = { left: false, right: false };
       let pointerX = null;
-      let lastInput = "none"; // "keyboard" | "pointer" | "none"
+      let lastInput = "none"; // "keyboard" | "pointer" | "tilt" | "none"
+
+      // Gyroscope/tilt control (phones). tiltZero is the resting angle captured
+      // at the start of each run, so however the player naturally holds the
+      // phone becomes "centre" — they tilt left/right from there to steer.
+      let tiltSetup = false;   // listener attached + permission granted
+      let tiltDelta = 0;       // current left-right tilt, degrees from rest
+      let tiltZero = null;     // resting angle; null = recalibrate on next reading
 
       function resize() {
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -605,6 +615,10 @@
       function startGame() {
         setHeaders(0);
         resetForRun();
+        // Recapture the resting tilt angle so however the phone is held now
+        // becomes centre for this run.
+        tiltZero = null;
+        tiltDelta = 0;
         alive = true;
         ui.hint.style.opacity = "0.65";
         ui.gameover.hidden = true;
@@ -644,6 +658,38 @@
         e.preventDefault();
       });
 
+      // Phone tilt. e.gamma is the left-right tilt in degrees. We track it
+      // relative to the resting angle captured at run start, and only claim
+      // control once the player tilts past the deadzone — so a phone sitting
+      // still never fights with touch/keyboard.
+      function onOrientation(e) {
+        if (e.gamma === null || e.gamma === undefined) return;
+        if (tiltZero === null) tiltZero = e.gamma;
+        const delta = e.gamma - tiltZero;
+        tiltDelta = delta;
+        if (Math.abs(delta) > TILT_DEADZONE_DEG) lastInput = "tilt";
+      }
+
+      // Attach the orientation listener. iOS 13+ gates the sensor behind a
+      // permission prompt that must be triggered from a user gesture, so this
+      // is called from the Start button tap.
+      function enableTilt() {
+        if (tiltSetup) return;
+        const DOE = window.DeviceOrientationEvent;
+        if (!DOE) return; // device has no orientation sensor
+        const attach = () => {
+          window.addEventListener("deviceorientation", onOrientation);
+          tiltSetup = true;
+        };
+        if (typeof DOE.requestPermission === "function") {
+          DOE.requestPermission().then((state) => {
+            if (state === "granted") attach();
+          }).catch(() => {});
+        } else {
+          attach();
+        }
+      }
+
       // ---------------------- physics ----------------------
       function tickPlayer(dt) {
         if (keys.left || keys.right) {
@@ -656,6 +702,15 @@
         } else if (lastInput === "pointer" && pointerX !== null) {
           // Smoothly chase the pointer (instant snap would feel jittery).
           player.x += (pointerX - player.x) * Math.min(1, dt * POINTER_LERP);
+        } else if (lastInput === "tilt") {
+          // Tilt steers like a velocity: angle past the deadzone, ramped to
+          // full speed at TILT_FULL_DEG, beyond which it's capped.
+          let d = tiltDelta;
+          if (d > TILT_DEADZONE_DEG) d -= TILT_DEADZONE_DEG;
+          else if (d < -TILT_DEADZONE_DEG) d += TILT_DEADZONE_DEG;
+          else d = 0;
+          const frac = Math.max(-1, Math.min(1, d / (TILT_FULL_DEG - TILT_DEADZONE_DEG)));
+          player.x += frac * TILT_MAX_SPEED * dt;
         }
         // Keep the player's head fully on-screen.
         player.x = Math.max(HEAD_RADIUS + 6, Math.min(W - HEAD_RADIUS - 6, player.x));
@@ -1094,6 +1149,9 @@
       // =================================================================
       ui.startBtn.addEventListener("click", () => {
         playerCountry = ui.countrySelect.value;
+        // This tap is a user gesture — the only context iOS lets us ask for
+        // gyroscope access from.
+        enableTilt();
         setCountryHeader();
         ui.picker.hidden = true;
         ui.game.hidden = false;
