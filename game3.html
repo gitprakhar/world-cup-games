@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <title>Ria World Cup — Headers</title>
+    <style>
+      *, *::before, *::after {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #0f1419;
+        color: #fff;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        overflow: hidden;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      /* ---------------- country picker modal ---------------- */
+      .picker {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(8, 10, 16, 0.85);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        padding: 20px;
+      }
+      .picker[hidden] { display: none; }
+      .picker-card {
+        background: #1a1d24;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
+        padding: 28px 28px 20px;
+        width: 100%;
+        max-width: 360px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      }
+      .picker-card h1 { margin: 0 0 6px; font-size: 22px; font-weight: 800; }
+      .picker-card p { margin: 0 0 18px; font-size: 13px; opacity: 0.7; }
+      .picker-card select {
+        width: 100%;
+        padding: 12px 14px;
+        background: #0f1219;
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 10px;
+        font-size: 16px;
+        font-family: inherit;
+        appearance: none;
+        -webkit-appearance: none;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' width='12' height='8'><path d='M1 1l5 5 5-5' stroke='%23fff' fill='none' stroke-width='1.5'/></svg>");
+        background-repeat: no-repeat;
+        background-position: right 14px center;
+        margin-bottom: 14px;
+      }
+      .picker-card button {
+        width: 100%;
+        padding: 13px;
+        background: #ff6e14;
+        color: #000;
+        font-weight: 700;
+        font-size: 15px;
+        font-family: inherit;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+      }
+      .picker-card button:hover { background: #ff8033; }
+
+      /* ---------------- game canvas + HUD ---------------- */
+      .game { position: fixed; inset: 0; }
+      .game[hidden] { display: none; }
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        touch-action: none; /* swallow scroll/pinch so drags move the player */
+        cursor: pointer;
+      }
+
+      .scoreboard {
+        position: absolute;
+        top: max(env(safe-area-inset-top, 0px), 16px);
+        left: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        pointer-events: none;
+      }
+      .stat {
+        background: rgba(0, 0, 0, 0.55);
+        padding: 8px 14px;
+        border-radius: 999px;
+        font-size: 14px;
+        font-weight: 600;
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+      }
+      .stat-headers { font-size: 22px; font-weight: 800; }
+
+      /* Big centred country header — flag + name + live score. */
+      .country-header {
+        position: absolute;
+        top: max(env(safe-area-inset-top, 0px), 16px);
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 10px 22px;
+        background: rgba(0, 0, 0, 0.55);
+        border: 1px solid rgba(253, 230, 138, 0.35);
+        border-radius: 999px;
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        pointer-events: none;
+        z-index: 2;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+        white-space: nowrap;
+      }
+      .header-flag { font-size: 32px; line-height: 1; }
+      .header-name {
+        font-size: 18px;
+        font-weight: 800;
+        color: #fde68a;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .header-score {
+        font-size: 32px;
+        font-weight: 900;
+        color: #ffffff;
+        font-variant-numeric: tabular-nums;
+        min-width: 56px;
+        text-align: right;
+        line-height: 1;
+      }
+      .header-score.pop {
+        animation: scorePop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+      @keyframes scorePop {
+        0%   { transform: scale(1);    color: #ffffff; }
+        35%  { transform: scale(1.25); color: #fde047; }
+        100% { transform: scale(1);    color: #ffffff; }
+      }
+
+      .leaderboard {
+        position: absolute;
+        top: max(env(safe-area-inset-top, 0px), 16px);
+        right: 16px;
+        width: 200px;
+        max-height: 70vh;
+        overflow: auto;
+        background: rgba(0, 0, 0, 0.55);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        border-radius: 12px;
+        padding: 10px 12px 8px;
+        font-size: 13px;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+        pointer-events: none;
+      }
+      .lb-title {
+        font-size: 11px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        opacity: 0.7;
+        margin-bottom: 4px;
+      }
+      .lb-row {
+        display: grid;
+        grid-template-columns: 18px 22px 1fr auto;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 2px;
+        border-radius: 6px;
+        font-variant-numeric: tabular-nums;
+      }
+      .lb-row.you {
+        background: rgba(253, 230, 138, 0.18);
+        color: #fde68a;
+        font-weight: 700;
+      }
+      .lb-rank { opacity: 0.55; font-size: 11px; }
+      .lb-flag { font-size: 16px; line-height: 1; }
+      .lb-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+      .hint {
+        position: absolute;
+        bottom: max(env(safe-area-inset-bottom, 0px), 24px);
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 13px;
+        opacity: 0.65;
+        pointer-events: none;
+        transition: opacity 0.4s ease-out;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+      }
+
+      /* +1 floater that flies from the bounce point to the leaderboard row. */
+      .floater {
+        position: fixed;
+        z-index: 6;
+        font-size: 28px;
+        font-weight: 900;
+        color: #fde047;
+        text-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+        pointer-events: none;
+        will-change: transform, opacity;
+        transition:
+          transform 0.85s cubic-bezier(0.25, 1.1, 0.5, 1),
+          opacity 0.85s ease-out;
+      }
+
+      /* ---------------- game over ---------------- */
+      .gameover {
+        position: absolute;
+        inset: 0;
+        z-index: 5;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(8, 10, 16, 0.7);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        padding: 20px;
+      }
+      .gameover[hidden] { display: none; }
+      .gameover-card {
+        background: #1a1d24;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
+        padding: 28px 32px;
+        text-align: center;
+        width: 100%;
+        max-width: 360px;
+        max-height: calc(100vh - 40px);
+        overflow: auto;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      }
+      .gameover-card h2 { margin: 0 0 4px; font-size: 26px; font-weight: 800; }
+      .gameover-card .score {
+        font-size: 64px;
+        font-weight: 900;
+        color: #fde047;
+        margin: 8px 0;
+        line-height: 1;
+      }
+      .gameover-card .label {
+        opacity: 0.6;
+        font-size: 12px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+      .gameover-card button {
+        margin-top: 18px;
+        width: 100%;
+        padding: 13px;
+        background: #ff6e14;
+        color: #000;
+        font-weight: 700;
+        font-size: 15px;
+        font-family: inherit;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+      }
+      .gameover-card button:hover { background: #ff8033; }
+
+      /* Leaderboard preview embedded in the game-over card so the player
+         can see where their country sits at the end of a run. Visually
+         echoes the live HUD leaderboard. */
+      .gameover-card .gameover-lb {
+        margin-top: 20px;
+        text-align: left;
+        max-height: 220px;
+        overflow: auto;
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 10px;
+        padding: 10px 12px 8px;
+      }
+      .gameover-card .gameover-lb-title {
+        font-size: 11px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        opacity: 0.65;
+        margin-bottom: 6px;
+      }
+      .gameover-card .lb-row {
+        display: grid;
+        grid-template-columns: 18px 22px 1fr auto;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 2px;
+        border-radius: 6px;
+        font-variant-numeric: tabular-nums;
+        font-size: 13px;
+      }
+      .gameover-card .lb-row.you {
+        background: rgba(253, 230, 138, 0.18);
+        color: #fde68a;
+        font-weight: 700;
+      }
+      .gameover-card .lb-rank { opacity: 0.55; font-size: 11px; }
+      .gameover-card .lb-flag { font-size: 16px; line-height: 1; }
+      .gameover-card .lb-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+      /* Small screens — push the side panels below the centred header so
+         they don't overlap, and shrink the leaderboard. */
+      @media (max-width: 600px) {
+        .scoreboard  { top: calc(max(env(safe-area-inset-top, 0px), 16px) + 56px); }
+        .leaderboard { top: calc(max(env(safe-area-inset-top, 0px), 16px) + 56px); }
+      }
+      @media (max-width: 480px) {
+        .leaderboard { width: 156px; padding: 8px 10px; font-size: 12px; }
+        .lb-flag { font-size: 14px; }
+        .stat { padding: 7px 11px; font-size: 12px; }
+        .stat-headers { font-size: 18px; }
+        .country-header { padding: 7px 14px; gap: 10px; }
+        .header-flag { font-size: 22px; }
+        .header-name { font-size: 13px; letter-spacing: 0.04em; }
+        .header-score { font-size: 22px; min-width: 40px; }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Step 1: pick a country. -->
+    <div class="picker" id="picker">
+      <div class="picker-card">
+        <h1>Pick your country</h1>
+        <p>Every header you score adds to your country's total on the leaderboard.</p>
+        <select id="country-select"></select>
+        <button id="start-btn" type="button">Start playing</button>
+      </div>
+    </div>
+
+    <!-- Step 2: the game itself. -->
+    <div class="game" id="game" hidden>
+      <canvas id="canvas"></canvas>
+
+      <div class="scoreboard">
+        <div class="stat stat-headers">⚡ <span id="headers">0</span></div>
+        <div class="stat">🏆 Best <span id="best">0</span></div>
+      </div>
+
+      <div class="country-header" id="country-header">
+        <div class="header-flag" id="header-flag">🇲🇽</div>
+        <div class="header-name" id="header-name">Mexico</div>
+        <div class="header-score" id="header-score">0</div>
+      </div>
+
+      <div class="leaderboard">
+        <div class="lb-title">🌎 Leaderboard</div>
+        <div id="lb-rows"></div>
+      </div>
+
+      <div class="hint" id="hint">Move with ← → / mouse / touch — keep the ball on your head</div>
+
+      <div class="gameover" id="gameover" hidden>
+        <div class="gameover-card">
+          <h2>Game over</h2>
+          <div class="label">You scored</div>
+          <div class="score" id="final-score">0</div>
+          <div class="label">headers</div>
+          <div class="gameover-lb">
+            <div class="gameover-lb-title">🌎 Leaderboard</div>
+            <div id="gameover-lb-rows"></div>
+          </div>
+          <button id="play-again" type="button">Play again</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // =================================================================
+      // COUNTRIES + LEADERBOARD STATE
+      // =================================================================
+      // [ISO-2, flag emoji, display name, seed score]. Seeds keep the
+      // leaderboard from reading all-zeros on first paint.
+      const COUNTRIES = [
+        ["MX", "🇲🇽", "Mexico", 412],
+        ["CO", "🇨🇴", "Colombia", 358],
+        ["PE", "🇵🇪", "Peru", 287],
+        ["CL", "🇨🇱", "Chile", 245],
+        ["AR", "🇦🇷", "Argentina", 391],
+        ["BR", "🇧🇷", "Brazil", 478],
+        ["US", "🇺🇸", "USA", 219],
+        ["ES", "🇪🇸", "Spain", 196],
+        ["PH", "🇵🇭", "Philippines", 173],
+        ["IN", "🇮🇳", "India", 312],
+      ];
+      // Per-country running totals — incremented on every successful header.
+      // Plain in-memory map (no persistence, per spec).
+      const scores = Object.fromEntries(
+        COUNTRIES.map(([code, , , seed]) => [code, seed])
+      );
+
+      // Session state.
+      let playerCountry = "MX";
+      let headers = 0;   // successful headers this run
+      let best = 0;
+      let alive = false;
+
+      // =================================================================
+      // UI REFERENCES
+      // =================================================================
+      const ui = {
+        picker: document.getElementById("picker"),
+        countrySelect: document.getElementById("country-select"),
+        startBtn: document.getElementById("start-btn"),
+        game: document.getElementById("game"),
+        canvas: document.getElementById("canvas"),
+        headers: document.getElementById("headers"),
+        best: document.getElementById("best"),
+        lbRows: document.getElementById("lb-rows"),
+        hint: document.getElementById("hint"),
+        gameover: document.getElementById("gameover"),
+        finalScore: document.getElementById("final-score"),
+        playAgain: document.getElementById("play-again"),
+        gameoverLbRows: document.getElementById("gameover-lb-rows"),
+        headerFlag: document.getElementById("header-flag"),
+        headerName: document.getElementById("header-name"),
+        headerScore: document.getElementById("header-score"),
+      };
+
+      // Populate the dropdown.
+      COUNTRIES.forEach(([code, flag, name]) => {
+        const opt = document.createElement("option");
+        opt.value = code;
+        opt.textContent = `${flag}  ${name}`;
+        if (code === playerCountry) opt.selected = true;
+        ui.countrySelect.appendChild(opt);
+      });
+
+      // Build the shared leaderboard markup once and reuse it for the live
+      // HUD board AND the end-of-run summary on the game-over card.
+      function buildLeaderboardHTML() {
+        const ranked = COUNTRIES
+          .map(([code, flag, name]) => ({ code, flag, name, score: scores[code] }))
+          .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+        return ranked
+          .map(
+            (r, idx) => `
+              <div class="lb-row${r.code === playerCountry ? " you" : ""}">
+                <span class="lb-rank">${idx + 1}</span>
+                <span class="lb-flag">${r.flag}</span>
+                <span class="lb-name">${r.name}</span>
+                <span>${r.score}</span>
+              </div>`
+          )
+          .join("");
+      }
+
+      // Live HUD leaderboard — refreshed on every header.
+      function renderLeaderboard() {
+        ui.lbRows.innerHTML = buildLeaderboardHTML();
+      }
+
+      // End-of-run snapshot — populated when the game-over card opens.
+      function renderGameoverLeaderboard() {
+        ui.gameoverLbRows.innerHTML = buildLeaderboardHTML();
+      }
+
+      function setHeaders(n) {
+        headers = n;
+        ui.headers.textContent = String(n);
+        if (n > best) {
+          best = n;
+          ui.best.textContent = String(n);
+        }
+      }
+
+      function setCountryHeader() {
+        const entry = COUNTRIES.find(([code]) => code === playerCountry);
+        if (!entry) return;
+        ui.headerFlag.textContent = entry[1];
+        ui.headerName.textContent = entry[2];
+        ui.headerScore.textContent = String(scores[playerCountry]);
+      }
+
+      // Re-trigger the .pop animation each header so the number visibly
+      // punches even on rapid-fire bounces.
+      function pulseCountryScore() {
+        ui.headerScore.textContent = String(scores[playerCountry]);
+        ui.headerScore.classList.remove("pop");
+        void ui.headerScore.offsetWidth; // force reflow
+        ui.headerScore.classList.add("pop");
+      }
+
+      // Spawn a "+1" at the bounce point and fly it to the player's row.
+      function spawnFloater(srcX, srcY) {
+        const f = document.createElement("div");
+        f.className = "floater";
+        f.textContent = "+1";
+        f.style.left = srcX + "px";
+        f.style.top = srcY + "px";
+        f.style.transform = "translate(-50%, -50%) scale(1)";
+        f.style.opacity = "1";
+        document.body.appendChild(f);
+
+        let targetX = window.innerWidth - 100;
+        let targetY = 60;
+        const youRow = ui.lbRows.querySelector(".lb-row.you");
+        if (youRow) {
+          const rect = youRow.getBoundingClientRect();
+          targetX = rect.left + rect.width / 2;
+          targetY = rect.top + rect.height / 2;
+        }
+        const dx = targetX - srcX;
+        const dy = targetY - srcY;
+        requestAnimationFrame(() => {
+          f.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0.55)`;
+          f.style.opacity = "0";
+        });
+        f.addEventListener("transitionend", () => f.remove(), { once: true });
+        setTimeout(() => f.remove(), 1200);
+      }
+
+      // =================================================================
+      // GAME PHYSICS + RENDERING
+      // =================================================================
+      const canvas = ui.canvas;
+      const ctx = canvas.getContext("2d");
+
+      // ---- tuning ----
+      const GRAVITY = 1300;              // px/s² — ball's downward acceleration
+      const BOUNCE_VY = 700;             // px/s — upward kick on every header
+      const BOUNCE_LATERAL = 340;        // px/s — max sideways push from an off-centre hit
+      const SIDE_RESTITUTION = 0.78;     // bounce energy retained off side walls
+      const PLAYER_KEYBOARD_SPEED = 540; // px/s — keyboard movement
+      const POINTER_LERP = 14;           // smoothing factor for mouse/touch follow
+      const GROUND_FRAC = 0.78;          // grass starts at this fraction of viewport height
+      const BALL_RADIUS = 22;
+      const HEAD_RADIUS = 19;
+      const LEG_HEIGHT = 36;
+      const TORSO_HEIGHT = 50;
+      const NECK_GAP = 4;
+      // Distance from groundY (feet) up to the head's centre — used for
+      // both drawing the figure and the bounce collision check.
+      const HEAD_CENTRE_FROM_FEET = LEG_HEIGHT + TORSO_HEIGHT + NECK_GAP + HEAD_RADIUS;
+
+      let W = 0, H = 0;
+      let groundY = 0;
+      const player = { x: 0 };
+      const ball = { x: 0, y: 0, vx: 0, vy: 0, spin: 0, vSpin: 0 };
+
+      // Track each input source separately; whichever fired most recently
+      // wins, so swapping mid-game (touch → mouse → arrow keys) just works.
+      const keys = { left: false, right: false };
+      let pointerX = null;
+      let lastInput = "none"; // "keyboard" | "pointer" | "none"
+
+      function resize() {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        W = window.innerWidth;
+        H = window.innerHeight;
+        canvas.width = W * dpr;
+        canvas.height = H * dpr;
+        canvas.style.width = W + "px";
+        canvas.style.height = H + "px";
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        groundY = H * GROUND_FRAC;
+        // Keep the player on-screen if the window shrank.
+        player.x = Math.max(40, Math.min(W - 40, player.x || W / 2));
+        if (!alive) {
+          ball.x = W / 2;
+          ball.y = H * 0.18;
+        }
+      }
+      window.addEventListener("resize", resize);
+
+      function resetForRun() {
+        player.x = W / 2;
+        // Drop the ball close to the player so the very first header is
+        // reachable even on keyboard — fixed pixel range (not a fraction of
+        // W) so wide desktops don't push the ball to a far corner where the
+        // arrow keys can't catch up in time.
+        const FIRST_DROP_HALF_RANGE = 110;
+        ball.x = player.x + (Math.random() * 2 - 1) * FIRST_DROP_HALF_RANGE;
+        ball.y = -BALL_RADIUS - 10;
+        ball.vx = 0;
+        ball.vy = 80; // small initial nudge so the drop feels purposeful
+        ball.spin = 0;
+        ball.vSpin = 0;
+      }
+
+      function startGame() {
+        setHeaders(0);
+        resetForRun();
+        alive = true;
+        ui.hint.style.opacity = "0.65";
+        ui.gameover.hidden = true;
+      }
+
+      function endGame() {
+        alive = false;
+        ui.finalScore.textContent = String(headers);
+        // Render the leaderboard snapshot into the card so the player can
+        // see where their country sits at the end of the run.
+        renderGameoverLeaderboard();
+        ui.gameover.hidden = false;
+      }
+
+      // ---------------------- input ----------------------
+      window.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
+          keys.left = true;
+          lastInput = "keyboard";
+        } else if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
+          keys.right = true;
+          lastInput = "keyboard";
+        }
+      });
+      window.addEventListener("keyup", (e) => {
+        if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") keys.left = false;
+        if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") keys.right = false;
+      });
+      // Mouse + touch both flow through pointer events — one handler each.
+      canvas.addEventListener("pointermove", (e) => {
+        pointerX = e.clientX;
+        lastInput = "pointer";
+      });
+      canvas.addEventListener("pointerdown", (e) => {
+        pointerX = e.clientX;
+        lastInput = "pointer";
+        e.preventDefault();
+      });
+
+      // ---------------------- physics ----------------------
+      function tickPlayer(dt) {
+        if (keys.left || keys.right) {
+          // Pressing a key implies direct control — override pointer-follow.
+          lastInput = "keyboard";
+          let vx = 0;
+          if (keys.left) vx -= PLAYER_KEYBOARD_SPEED;
+          if (keys.right) vx += PLAYER_KEYBOARD_SPEED;
+          player.x += vx * dt;
+        } else if (lastInput === "pointer" && pointerX !== null) {
+          // Smoothly chase the pointer (instant snap would feel jittery).
+          player.x += (pointerX - player.x) * Math.min(1, dt * POINTER_LERP);
+        }
+        // Keep the player's head fully on-screen.
+        player.x = Math.max(HEAD_RADIUS + 6, Math.min(W - HEAD_RADIUS - 6, player.x));
+      }
+
+      function headCentre() {
+        return { x: player.x, y: groundY - HEAD_CENTRE_FROM_FEET };
+      }
+
+      function tickBall(dt) {
+        ball.vy += GRAVITY * dt;
+        ball.x += ball.vx * dt;
+        ball.y += ball.vy * dt;
+        ball.spin += ball.vSpin * dt + ball.vx * dt * 0.008;
+
+        // Side walls.
+        if (ball.x - BALL_RADIUS < 0) {
+          ball.x = BALL_RADIUS;
+          ball.vx = -ball.vx * SIDE_RESTITUTION;
+        } else if (ball.x + BALL_RADIUS > W) {
+          ball.x = W - BALL_RADIUS;
+          ball.vx = -ball.vx * SIDE_RESTITUTION;
+        }
+
+        // Header collision — ball overlaps the head's upper hemisphere
+        // while moving downward. Side-hits don't count; only true headers.
+        const head = headCentre();
+        const dx = ball.x - head.x;
+        const dy = ball.y - head.y;
+        const combined = BALL_RADIUS + HEAD_RADIUS;
+        if (
+          ball.vy > 0 &&
+          dy < 0 &&
+          dx * dx + dy * dy < combined * combined
+        ) {
+          const dist = Math.sqrt(dx * dx + dy * dy) || 0.001;
+          // Snap ball just outside the head along the contact normal so
+          // it can't stick / re-trigger next frame.
+          ball.x = head.x + (dx / dist) * combined;
+          ball.y = head.y + (dy / dist) * combined;
+          // -1 (far left of head) → ball goes left; +1 (far right) → right.
+          const offset = Math.max(-1, Math.min(1, dx / HEAD_RADIUS));
+          ball.vy = -BOUNCE_VY;
+          ball.vx = offset * BOUNCE_LATERAL;
+          ball.vSpin = offset * 0.06;
+
+          setHeaders(headers + 1);
+          scores[playerCountry] = (scores[playerCountry] || 0) + 1;
+          renderLeaderboard();
+          pulseCountryScore();
+          spawnFloater(ball.x, ball.y - BALL_RADIUS - 4);
+          ui.hint.style.opacity = "0";
+        }
+
+        // Ground = run ends.
+        if (ball.y + BALL_RADIUS >= groundY) {
+          ball.y = groundY - BALL_RADIUS;
+          ball.vy = 0;
+          endGame();
+        }
+      }
+
+      // ---------------------- rendering ----------------------
+      // Stadium scene at golden hour. Rebuilt every frame — cheap at 60fps
+      // and sidesteps any cache invalidation work on resize.
+      function drawBackground() {
+        // SKY
+        const sky = ctx.createLinearGradient(0, 0, 0, groundY);
+        sky.addColorStop(0, "#162247");
+        sky.addColorStop(0.4, "#3a2d62");
+        sky.addColorStop(0.75, "#c4633a");
+        sky.addColorStop(1, "#f0a560");
+        ctx.fillStyle = sky;
+        ctx.fillRect(0, 0, W, groundY);
+
+        // SUN + warm halo
+        const sunX = W * 0.72;
+        const sunY = groundY - H * 0.12;
+        const sunR = Math.min(W, H) * 0.045;
+        const halo = ctx.createRadialGradient(sunX, sunY, sunR * 0.5, sunX, sunY, sunR * 8);
+        halo.addColorStop(0, "rgba(255, 225, 165, 0.7)");
+        halo.addColorStop(0.35, "rgba(255, 170, 110, 0.22)");
+        halo.addColorStop(1, "rgba(255, 150, 100, 0)");
+        ctx.fillStyle = halo;
+        ctx.fillRect(0, 0, W, groundY);
+        ctx.fillStyle = "#fff0c8";
+        ctx.beginPath();
+        ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // CLOUDS
+        function cloud(cx, cy, sz) {
+          ctx.fillStyle = "rgba(255, 205, 175, 0.32)";
+          ctx.beginPath();
+          ctx.ellipse(cx - sz * 0.45, cy, sz * 0.4, sz * 0.18, 0, 0, Math.PI * 2);
+          ctx.ellipse(cx, cy - sz * 0.06, sz * 0.5, sz * 0.22, 0, 0, Math.PI * 2);
+          ctx.ellipse(cx + sz * 0.45, cy + sz * 0.02, sz * 0.42, 0.19 * sz, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        cloud(W * 0.18, H * 0.22, Math.min(W, H) * 0.09);
+        cloud(W * 0.46, H * 0.11, Math.min(W, H) * 0.11);
+        cloud(W * 0.88, H * 0.27, Math.min(W, H) * 0.075);
+
+        // STADIUM SILHOUETTE — stepped roofline of distant stands.
+        ctx.fillStyle = "#15203a";
+        ctx.beginPath();
+        ctx.moveTo(0, groundY);
+        ctx.lineTo(0, groundY - 24);
+        ctx.lineTo(W * 0.07, groundY - 26);
+        ctx.lineTo(W * 0.09, groundY - 44);
+        ctx.lineTo(W * 0.3,  groundY - 46);
+        ctx.lineTo(W * 0.32, groundY - 34);
+        ctx.lineTo(W * 0.48, groundY - 36);
+        ctx.lineTo(W * 0.5,  groundY - 56);
+        ctx.lineTo(W * 0.72, groundY - 56);
+        ctx.lineTo(W * 0.74, groundY - 40);
+        ctx.lineTo(W * 0.94, groundY - 38);
+        ctx.lineTo(W * 0.96, groundY - 26);
+        ctx.lineTo(W, groundY - 24);
+        ctx.lineTo(W, groundY);
+        ctx.closePath();
+        ctx.fill();
+
+        // FLOODLIGHTS
+        ctx.strokeStyle = "#0e1626";
+        ctx.lineWidth = 2;
+        const lights = [
+          { x: W * 0.16, h: 78 },
+          { x: W * 0.61, h: 96 },
+          { x: W * 0.88, h: 72 },
+        ];
+        for (const { x, h } of lights) {
+          ctx.beginPath();
+          ctx.moveTo(x, groundY - 50);
+          ctx.lineTo(x, groundY - 50 - h);
+          ctx.stroke();
+          const ly = groundY - 50 - h;
+          const lampGlow = ctx.createRadialGradient(x, ly, 0, x, ly, 32);
+          lampGlow.addColorStop(0, "rgba(255, 240, 200, 0.6)");
+          lampGlow.addColorStop(1, "rgba(255, 240, 200, 0)");
+          ctx.fillStyle = lampGlow;
+          ctx.beginPath();
+          ctx.arc(x, ly, 32, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#fff5d6";
+          ctx.beginPath();
+          ctx.arc(x, ly, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Horizon haze — sells the stadium-meets-pitch depth.
+        const haze = ctx.createLinearGradient(0, groundY - 10, 0, groundY + 4);
+        haze.addColorStop(0, "rgba(255, 200, 150, 0)");
+        haze.addColorStop(1, "rgba(255, 200, 150, 0.4)");
+        ctx.fillStyle = haze;
+        ctx.fillRect(0, groundY - 10, W, 14);
+
+        // GRASS + mowing stripes from a vanishing point above.
+        const grass = ctx.createLinearGradient(0, groundY, 0, H);
+        grass.addColorStop(0, "#4d8554");
+        grass.addColorStop(0.5, "#386841");
+        grass.addColorStop(1, "#1d4326");
+        ctx.fillStyle = grass;
+        ctx.fillRect(0, groundY, W, H - groundY);
+        const vpX = W * 0.5;
+        const vpY = groundY - H * 0.25;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, groundY, W, H - groundY);
+        ctx.clip();
+        for (let i = 0; i < 9; i++) {
+          if (i % 2 !== 0) continue;
+          const a1 = (i / 9 - 0.5) * Math.PI * 1.25;
+          const a2 = ((i + 1) / 9 - 0.5) * Math.PI * 1.25;
+          ctx.fillStyle = "rgba(0,0,0,0.11)";
+          ctx.beginPath();
+          ctx.moveTo(vpX + Math.tan(a1) * (groundY - vpY), groundY);
+          ctx.lineTo(vpX + Math.tan(a1) * (H + 300 - vpY), H + 300);
+          ctx.lineTo(vpX + Math.tan(a2) * (H + 300 - vpY), H + 300);
+          ctx.lineTo(vpX + Math.tan(a2) * (groundY - vpY), groundY);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      // Cubist / flat-illustration player: limited palette, hard-edged
+      // planes, no gradients. The face is split into a lit half (warm
+      // off-white) and a shadow half (cool grey), with a heavy brow and an
+      // angular nose. Red jersey with black collar + white trim + black
+      // belt echoes the reference.
+      function drawPlayer() {
+        const px = player.x;
+        const feetY = groundY;
+        const hipY = feetY - LEG_HEIGHT;
+        const shoulderY = hipY - TORSO_HEIGHT;
+        const head = headCentre();
+
+        // Flat palette — change here to retheme the player.
+        const SKIN_LIGHT = "#eee5d3";
+        const SKIN_SHADOW = "#7d7872";
+        const HAIR = "#a8a8a2";
+        const BROW = "#161616";
+        const JERSEY = "#c5221c";
+        const JERSEY_SHADOW = "#7d1612";
+        const COLLAR = "#0e0e0e";
+        const TRIM = "#f5efe1";
+        const LEG = "#161821";
+
+        // Drop shadow under the feet.
+        ctx.save();
+        ctx.translate(px, feetY + 2);
+        ctx.scale(1, 0.32);
+        ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+        ctx.beginPath();
+        ctx.arc(0, 0, 26, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // ---- Legs ----
+        // Dark rectangles with a 2px inside-edge highlight to suggest a
+        // plane break (very subtle at this scale, but reads with the rest).
+        ctx.fillStyle = LEG;
+        ctx.fillRect(px - 12, hipY, 9, LEG_HEIGHT);
+        ctx.fillRect(px + 3, hipY, 9, LEG_HEIGHT);
+        ctx.fillStyle = "rgba(255,255,255,0.08)";
+        ctx.fillRect(px - 12, hipY, 2, LEG_HEIGHT);
+        ctx.fillRect(px + 3, hipY, 2, LEG_HEIGHT);
+        // Cleats.
+        ctx.fillStyle = "#0a0a0a";
+        ctx.fillRect(px - 15, feetY - 4, 15, 4);
+        ctx.fillRect(px, feetY - 4, 15, 4);
+
+        // ---- Torso / red jersey ----
+        const tL = px - 18;
+        const tR = px + 18;
+        const tT = shoulderY;
+        const tB = hipY;
+        // Base red plane.
+        ctx.fillStyle = JERSEY;
+        ctx.fillRect(tL, tT, 36, TORSO_HEIGHT);
+        // Shadow plane on the right — angled cubist break.
+        ctx.fillStyle = JERSEY_SHADOW;
+        ctx.beginPath();
+        ctx.moveTo(px + 3, tT);
+        ctx.lineTo(tR, tT);
+        ctx.lineTo(tR, tB);
+        ctx.lineTo(px - 3, tB);
+        ctx.closePath();
+        ctx.fill();
+        // Black collar band at the top + white trim below it.
+        ctx.fillStyle = COLLAR;
+        ctx.fillRect(tL, tT, 36, 7);
+        ctx.fillStyle = TRIM;
+        ctx.fillRect(tL, tT + 7, 36, 2);
+        // Belt — black strip near the bottom of the jersey.
+        ctx.fillStyle = COLLAR;
+        ctx.fillRect(tL, tB - 5, 36, 4);
+
+        // ---- Arms ----
+        // Flat trapezoid sleeves in the jersey-shadow tone, with one light
+        // and one shadow hand to carry the bicolour conceit through.
+        ctx.fillStyle = JERSEY_SHADOW;
+        ctx.beginPath();
+        ctx.moveTo(tL, tT + 7);
+        ctx.lineTo(tL - 8, tT + 10);
+        ctx.lineTo(tL - 6, tT + 30);
+        ctx.lineTo(tL, tT + 28);
+        ctx.closePath();
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(tR, tT + 7);
+        ctx.lineTo(tR + 8, tT + 10);
+        ctx.lineTo(tR + 6, tT + 30);
+        ctx.lineTo(tR, tT + 28);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = SKIN_LIGHT;
+        ctx.beginPath();
+        ctx.arc(tL - 6, tT + 32, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = SKIN_SHADOW;
+        ctx.beginPath();
+        ctx.arc(tR + 6, tT + 32, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // ---- Head ----
+        // 1) Light-skin base disc.
+        ctx.fillStyle = SKIN_LIGHT;
+        ctx.beginPath();
+        ctx.arc(head.x, head.y, HEAD_RADIUS, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 2) Clip to the head and paint the shadow plane + features inside.
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(head.x, head.y, HEAD_RADIUS, 0, Math.PI * 2);
+        ctx.clip();
+
+        // Shadow plane on the right — vertical slab, angled inward at the
+        // chin for the geometric "two halves of a face" look.
+        ctx.fillStyle = SKIN_SHADOW;
+        ctx.beginPath();
+        ctx.moveTo(head.x + HEAD_RADIUS * 0.05, head.y - HEAD_RADIUS);
+        ctx.lineTo(head.x + HEAD_RADIUS, head.y - HEAD_RADIUS);
+        ctx.lineTo(head.x + HEAD_RADIUS, head.y + HEAD_RADIUS);
+        ctx.lineTo(head.x + HEAD_RADIUS * 0.25, head.y + HEAD_RADIUS);
+        ctx.closePath();
+        ctx.fill();
+
+        // Hair — flat angular cap across the top of the head.
+        ctx.fillStyle = HAIR;
+        ctx.beginPath();
+        ctx.moveTo(head.x - HEAD_RADIUS, head.y - HEAD_RADIUS * 0.15);
+        ctx.lineTo(head.x - HEAD_RADIUS * 0.55, head.y - HEAD_RADIUS);
+        ctx.lineTo(head.x + HEAD_RADIUS * 0.5, head.y - HEAD_RADIUS);
+        ctx.lineTo(head.x + HEAD_RADIUS, head.y - HEAD_RADIUS * 0.55);
+        ctx.lineTo(head.x + HEAD_RADIUS, head.y - HEAD_RADIUS * 0.28);
+        ctx.lineTo(head.x + HEAD_RADIUS * 0.55, head.y - HEAD_RADIUS * 0.38);
+        ctx.lineTo(head.x - HEAD_RADIUS * 0.4, head.y - HEAD_RADIUS * 0.32);
+        ctx.closePath();
+        ctx.fill();
+
+        // Heavy brow — thick dark slab under the hairline.
+        ctx.fillStyle = BROW;
+        ctx.fillRect(
+          head.x - HEAD_RADIUS * 0.65,
+          head.y - HEAD_RADIUS * 0.2,
+          HEAD_RADIUS * 1.25,
+          Math.max(2, HEAD_RADIUS * 0.18)
+        );
+
+        // Angular nose — small dark triangle pointing down-right.
+        ctx.fillStyle = BROW;
+        ctx.beginPath();
+        ctx.moveTo(head.x + HEAD_RADIUS * 0.1, head.y - HEAD_RADIUS * 0.02);
+        ctx.lineTo(head.x + HEAD_RADIUS * 0.55, head.y + HEAD_RADIUS * 0.28);
+        ctx.lineTo(head.x + HEAD_RADIUS * 0.18, head.y + HEAD_RADIUS * 0.3);
+        ctx.closePath();
+        ctx.fill();
+
+        // Tiny ear nub on the left side of the head.
+        ctx.fillStyle = SKIN_LIGHT;
+        ctx.beginPath();
+        ctx.arc(
+          head.x - HEAD_RADIUS * 0.92,
+          head.y + HEAD_RADIUS * 0.1,
+          HEAD_RADIUS * 0.18,
+          0,
+          Math.PI * 2
+        );
+        ctx.fill();
+
+        ctx.restore();
+
+        // Crisp outline so the head silhouette pops against the pitch.
+        ctx.lineWidth = 1.3;
+        ctx.strokeStyle = "rgba(0,0,0,0.55)";
+        ctx.beginPath();
+        ctx.arc(head.x, head.y, HEAD_RADIUS, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // White sphere with radial-gradient shading + drop shadow.
+      function drawBall() {
+        const heightAbove = groundY - ball.y;
+        const heightFrac = Math.max(0, Math.min(1, heightAbove / (H * 0.55)));
+        const shadowAlpha = 0.4 * (1 - heightFrac * 0.65);
+        const shadowScale = Math.max(0.45, 1 - heightFrac * 0.5);
+        ctx.save();
+        ctx.translate(ball.x, groundY + BALL_RADIUS * 0.15);
+        ctx.scale(shadowScale, 0.3);
+        ctx.fillStyle = `rgba(0,0,0,${shadowAlpha.toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(0, 0, BALL_RADIUS, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(ball.x, ball.y);
+
+        // Body — lit from the upper-left.
+        const body = ctx.createRadialGradient(
+          -BALL_RADIUS * 0.32, -BALL_RADIUS * 0.38, 0,
+          0, 0, BALL_RADIUS * 1.05
+        );
+        body.addColorStop(0, "#ffffff");
+        body.addColorStop(0.4, "#f0f0f0");
+        body.addColorStop(0.82, "#a8a8a8");
+        body.addColorStop(1, "#666666");
+        ctx.fillStyle = body;
+        ctx.beginPath();
+        ctx.arc(0, 0, BALL_RADIUS, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Specular hotspot.
+        const spec = ctx.createRadialGradient(
+          -BALL_RADIUS * 0.34, -BALL_RADIUS * 0.4, 0,
+          -BALL_RADIUS * 0.34, -BALL_RADIUS * 0.4, BALL_RADIUS * 0.42
+        );
+        spec.addColorStop(0, "rgba(255,255,255,0.95)");
+        spec.addColorStop(0.6, "rgba(255,255,255,0.25)");
+        spec.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = spec;
+        ctx.beginPath();
+        ctx.arc(-BALL_RADIUS * 0.34, -BALL_RADIUS * 0.4, BALL_RADIUS * 0.42, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Edge.
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = "rgba(0,0,0,0.18)";
+        ctx.beginPath();
+        ctx.arc(0, 0, BALL_RADIUS, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.restore();
+      }
+
+      // ---------------------- main loop ----------------------
+      let lastT = performance.now();
+      function loop(now) {
+        const dt = Math.min((now - lastT) / 1000, 0.05);
+        lastT = now;
+        if (alive) {
+          tickPlayer(dt);
+          tickBall(dt);
+        }
+        drawBackground();
+        drawPlayer();
+        drawBall();
+        requestAnimationFrame(loop);
+      }
+
+      // =================================================================
+      // BOOT
+      // =================================================================
+      ui.startBtn.addEventListener("click", () => {
+        playerCountry = ui.countrySelect.value;
+        setCountryHeader();
+        ui.picker.hidden = true;
+        ui.game.hidden = false;
+        resize();
+        renderLeaderboard();
+        startGame();
+      });
+
+      ui.playAgain.addEventListener("click", () => startGame());
+
+      resize();
+      renderLeaderboard();
+      requestAnimationFrame(loop);
+    </script>
+  </body>
+</html>
