@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
     <title>Ria World Cup — Headers</title>
+    <!-- Pixel/bitmap font for the billboard ads. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
     <style>
       *, *::before, *::after {
         box-sizing: border-box;
@@ -87,7 +91,10 @@
         height: 100%;
         touch-action: none; /* swallow scroll/pinch so drags move the player */
         cursor: pointer;
+        image-rendering: pixelated;        /* keep the upscaled pixel art crisp */
+        image-rendering: -moz-crisp-edges;
       }
+      .go-player { image-rendering: pixelated; image-rendering: -moz-crisp-edges; }
 
       .scoreboard {
         position: absolute;
@@ -542,6 +549,20 @@
       };
       const DEFAULT_KIT = { jersey: "#c5221c", shadow: "#7d1612", collar: "#0e0e0e", trim: "#f5efe1" };
 
+      // Currency + indicative USD rate per country, for the Ria ad ticker.
+      const RATES = {
+        MX: { cur: "MXN", rate: "1767" },
+        CO: { cur: "COP", rate: "3,900" },
+        PE: { cur: "PEN", rate: "3.75" },
+        CL: { cur: "CLP", rate: "950" },
+        AR: { cur: "ARS", rate: "990" },
+        BR: { cur: "BRL", rate: "5.40" },
+        US: { cur: "USD", rate: "1.00" },
+        ES: { cur: "EUR", rate: "0.92" },
+        PH: { cur: "PHP", rate: "58" },
+        IN: { cur: "INR", rate: "83.5" },
+      };
+
       // Stadium backdrops — one is picked at random each run. Each theme just
       // recolours the shared scene (sky gradient, sun/moon + halo, clouds,
       // floodlight glow, grass, horizon haze). stars=true scatters a starfield.
@@ -766,6 +787,25 @@
       const player = { x: 0 };
       const ball = { x: 0, y: 0, vx: 0, vy: 0, spin: 0, vSpin: 0 };
 
+      // ---- pixel-art buffer ----
+      // The whole scene is drawn into a tiny offscreen canvas in "virtual
+      // pixels", then upscaled to the screen with smoothing OFF — that hard
+      // nearest-neighbour blow-up is what gives the chunky 8-bit look.
+      let PX = 4;            // CSS px per virtual pixel
+      let vW = 0, vH = 0;    // buffer size in virtual px
+      let vGround = 0;       // pitch line in virtual px
+      const buf = document.createElement("canvas");
+      const bctx = buf.getContext("2d");
+      let crowd = [];        // precomputed fans {x, y, jersey} in virtual px
+      let adTime = 0;        // ad-board slide timer, seconds
+      let adVY = 0, adVH = 0; // ad board rect in the scene buffer (virtual px)
+      const adBuf = document.createElement("canvas"); // finer-res ad layer
+      const adLogoTmp = document.createElement("canvas"); // logo pixelation step
+      const adLogo = new Image();
+      let adLogoReady = false;
+      adLogo.onload = () => { adLogoReady = true; };
+      adLogo.src = "logo.png";
+
       // Track each input source separately; whichever fired most recently
       // wins, so swapping mid-game (touch → mouse → arrow keys) just works.
       const keys = { left: false, right: false };
@@ -788,13 +828,44 @@
         canvas.style.width = W + "px";
         canvas.style.height = H + "px";
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.imageSmoothingEnabled = false;
         groundY = H * GROUND_FRAC;
+
+        // Size the low-res buffer — aim for ~230 virtual px across.
+        PX = Math.max(3, Math.round(W / 230));
+        vW = Math.ceil(W / PX);
+        vH = Math.ceil(H / PX);
+        vGround = Math.round(groundY / PX);
+        buf.width = vW;
+        buf.height = vH;
+        bctx.imageSmoothingEnabled = false;
+        seedCrowd();
+
         if (bgTheme.stars) seedStars();
         // Keep the player on-screen if the window shrank.
         player.x = Math.max(40, Math.min(W - 40, player.x || W / 2));
         if (!alive) {
           ball.x = W / 2;
           ball.y = H * 0.18;
+        }
+      }
+
+      // Lay out the crowd: rows of little fans filling the top stands band.
+      // Colours are fixed per seat (computed once) so the crowd doesn't
+      // shimmer frame to frame.
+      const CROWD_SHIRTS = ["#2f6fd6", "#1b4fb0", "#d63a3a", "#e0a020",
+                            "#e8e8e8", "#3aa657", "#7a3ad6", "#d6943a"];
+      function seedCrowd() {
+        crowd = [];
+        const standsBottom = Math.round(vH * 0.17);
+        const cw = 6, chRow = 7;
+        let row = 0;
+        for (let y = 2; y < standsBottom; y += chRow, row++) {
+          const off = (row % 2) * (cw / 2);
+          for (let x = -cw; x < vW + cw; x += cw) {
+            const i = (row * 928 + Math.round(x)) % CROWD_SHIRTS.length;
+            crowd.push({ x: Math.round(x + off), y, jersey: CROWD_SHIRTS[(i + CROWD_SHIRTS.length) % CROWD_SHIRTS.length] });
+          }
         }
       }
       window.addEventListener("resize", resize);
@@ -852,17 +923,30 @@
         ui.countryHeader.classList.add("reveal");
       }
 
-      // Render the cubist footballer (in the country kit) onto the small
-      // game-over card canvas, centred with feet near the bottom.
+      // Render the pixel footballer (in the country kit) onto the game-over
+      // card: draw into a tiny buffer, then upscale crisply to the canvas.
       function drawCardPlayer() {
+        const cbW = 40, cbH = 46;
+        const cb = document.createElement("canvas");
+        cb.width = cbW;
+        cb.height = cbH;
+        const cc = cb.getContext("2d");
+        cc.imageSmoothingEnabled = false;
+        // Grid scale so the figure fills the buffer height with a small margin.
+        const pp = (HEAD_CENTRE_FROM_FEET + HEAD_RADIUS) / (cbH - 6);
+        drawPlayer(cc, pp, (cbW / 2) * pp, (cbH - 3) * pp);
+
         const cssW = 140, cssH = 150;
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const c = ui.goPlayer.getContext("2d");
         ui.goPlayer.width = cssW * dpr;
         ui.goPlayer.height = cssH * dpr;
         c.setTransform(dpr, 0, 0, dpr, 0, 0);
+        c.imageSmoothingEnabled = false;
         c.clearRect(0, 0, cssW, cssH);
-        drawPlayer(c, cssW / 2, cssH - 8);
+        const scale = Math.min(cssW / cbW, cssH / cbH);
+        const dw = cbW * scale, dh = cbH * scale;
+        c.drawImage(cb, (cssW - dw) / 2, (cssH - dh) / 2, dw, dh);
       }
 
       // Count a number up to `to` over `dur` ms for a punchy reveal.
@@ -1039,366 +1123,242 @@
       }
 
       // ---------------------- rendering ----------------------
-      // Stadium scene at golden hour. Rebuilt every frame — cheap at 60fps
-      // and sidesteps any cache invalidation work on resize.
-      function drawBackground() {
-        // SKY — gradient stops come from the active theme.
-        const sky = ctx.createLinearGradient(0, 0, 0, groundY);
-        for (const [stop, color] of bgTheme.sky) sky.addColorStop(stop, color);
-        ctx.fillStyle = sky;
-        ctx.fillRect(0, 0, W, groundY);
+      // Everything is painted into the low-res buffer `bctx`, then the loop
+      // blits it to the screen with smoothing off for the chunky 8-bit look.
 
-        // STARS — night theme only.
-        if (stars.length) {
-          ctx.fillStyle = "rgba(255,255,255,0.85)";
-          for (const s of stars) {
-            ctx.beginPath();
-            ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
-
-        // SUN / MOON + halo
-        const sunX = W * 0.72;
-        const sunY = groundY - H * 0.12;
-        const sunR = Math.min(W, H) * 0.045;
-        const halo = ctx.createRadialGradient(sunX, sunY, sunR * 0.5, sunX, sunY, sunR * 8);
-        for (const [stop, color] of bgTheme.halo) halo.addColorStop(stop, color);
-        ctx.fillStyle = halo;
-        ctx.fillRect(0, 0, W, groundY);
-        ctx.fillStyle = bgTheme.celestial;
-        ctx.beginPath();
-        ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2);
-        ctx.fill();
-
-        // CLOUDS
-        function cloud(cx, cy, sz) {
-          ctx.fillStyle = bgTheme.cloud;
-          ctx.beginPath();
-          ctx.ellipse(cx - sz * 0.45, cy, sz * 0.4, sz * 0.18, 0, 0, Math.PI * 2);
-          ctx.ellipse(cx, cy - sz * 0.06, sz * 0.5, sz * 0.22, 0, 0, Math.PI * 2);
-          ctx.ellipse(cx + sz * 0.45, cy + sz * 0.02, sz * 0.42, 0.19 * sz, 0, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        cloud(W * 0.18, H * 0.22, Math.min(W, H) * 0.09);
-        cloud(W * 0.46, H * 0.11, Math.min(W, H) * 0.11);
-        cloud(W * 0.88, H * 0.27, Math.min(W, H) * 0.075);
-
-        // STADIUM SILHOUETTE — stepped roofline of distant stands.
-        ctx.fillStyle = "#15203a";
-        ctx.beginPath();
-        ctx.moveTo(0, groundY);
-        ctx.lineTo(0, groundY - 24);
-        ctx.lineTo(W * 0.07, groundY - 26);
-        ctx.lineTo(W * 0.09, groundY - 44);
-        ctx.lineTo(W * 0.3,  groundY - 46);
-        ctx.lineTo(W * 0.32, groundY - 34);
-        ctx.lineTo(W * 0.48, groundY - 36);
-        ctx.lineTo(W * 0.5,  groundY - 56);
-        ctx.lineTo(W * 0.72, groundY - 56);
-        ctx.lineTo(W * 0.74, groundY - 40);
-        ctx.lineTo(W * 0.94, groundY - 38);
-        ctx.lineTo(W * 0.96, groundY - 26);
-        ctx.lineTo(W, groundY - 24);
-        ctx.lineTo(W, groundY);
-        ctx.closePath();
-        ctx.fill();
-
-        // FLOODLIGHTS
-        ctx.strokeStyle = "#0e1626";
-        ctx.lineWidth = 2;
-        const lights = [
-          { x: W * 0.16, h: 78 },
-          { x: W * 0.61, h: 96 },
-          { x: W * 0.88, h: 72 },
-        ];
-        for (const { x, h } of lights) {
-          ctx.beginPath();
-          ctx.moveTo(x, groundY - 50);
-          ctx.lineTo(x, groundY - 50 - h);
-          ctx.stroke();
-          const ly = groundY - 50 - h;
-          const lampGlow = ctx.createRadialGradient(x, ly, 0, x, ly, 32);
-          lampGlow.addColorStop(0, bgTheme.lampGlow);
-          lampGlow.addColorStop(1, bgTheme.lampGlow.replace(/[\d.]+\)$/, "0)"));
-          ctx.fillStyle = lampGlow;
-          ctx.beginPath();
-          ctx.arc(x, ly, 32, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = "#fff5d6";
-          ctx.beginPath();
-          ctx.arc(x, ly, 4, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        // Horizon haze — sells the stadium-meets-pitch depth.
-        const haze = ctx.createLinearGradient(0, groundY - 10, 0, groundY + 4);
-        haze.addColorStop(0, bgTheme.haze.replace(/[\d.]+\)$/, "0)"));
-        haze.addColorStop(1, bgTheme.haze);
-        ctx.fillStyle = haze;
-        ctx.fillRect(0, groundY - 10, W, 14);
-
-        // GRASS + mowing stripes from a vanishing point above.
-        const grass = ctx.createLinearGradient(0, groundY, 0, H);
-        grass.addColorStop(0, bgTheme.grass[0]);
-        grass.addColorStop(0.5, bgTheme.grass[1]);
-        grass.addColorStop(1, bgTheme.grass[2]);
-        ctx.fillStyle = grass;
-        ctx.fillRect(0, groundY, W, H - groundY);
-        const vpX = W * 0.5;
-        const vpY = groundY - H * 0.25;
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(0, groundY, W, H - groundY);
-        ctx.clip();
-        for (let i = 0; i < 9; i++) {
-          if (i % 2 !== 0) continue;
-          const a1 = (i / 9 - 0.5) * Math.PI * 1.25;
-          const a2 = ((i + 1) / 9 - 0.5) * Math.PI * 1.25;
-          ctx.fillStyle = "rgba(0,0,0,0.11)";
-          ctx.beginPath();
-          ctx.moveTo(vpX + Math.tan(a1) * (groundY - vpY), groundY);
-          ctx.lineTo(vpX + Math.tan(a1) * (H + 300 - vpY), H + 300);
-          ctx.lineTo(vpX + Math.tan(a2) * (H + 300 - vpY), H + 300);
-          ctx.lineTo(vpX + Math.tan(a2) * (groundY - vpY), groundY);
-          ctx.closePath();
-          ctx.fill();
-        }
-        ctx.restore();
+      // Fill a CSS-space rectangle into context `c`, snapping both edges to a
+      // `pp`-pixel grid so the result lands on clean pixel boundaries.
+      function pxRect(c, pp, x, y, w, h, color) {
+        const X = Math.round(x / pp), Y = Math.round(y / pp);
+        const X2 = Math.round((x + w) / pp), Y2 = Math.round((y + h) / pp);
+        c.fillStyle = color;
+        c.fillRect(X, Y, Math.max(1, X2 - X), Math.max(1, Y2 - Y));
       }
 
-      // Cubist / flat-illustration player: limited palette, hard-edged
-      // planes, no gradients. The face is split into a lit half (warm
-      // off-white) and a shadow half (cool grey), with a heavy brow and an
-      // angular nose. The jersey (base + shadow plane, collar, trim, belt)
-      // is coloured from the selected country's kit — see KITS.
-      // Draws the figure onto context `c` with feet at (px, feetY). Defaults
-      // to the live game canvas; the game-over card passes its own mini canvas.
-      function drawPlayer(c = ctx, px = player.x, feetY = groundY) {
+      // A simple pixel goal sitting on the touchline behind the player.
+      function drawGoal(b) {
+        const gw = Math.round(vW * 0.34);
+        const gh = Math.round(vGround * 0.18) + 6;
+        const gx = Math.round(vW / 2 - gw / 2);
+        const gy = vGround - gh;
+        // Net fill + grid.
+        b.fillStyle = "rgba(225,240,232,0.10)";
+        b.fillRect(gx, gy, gw, gh);
+        b.fillStyle = "rgba(255,255,255,0.18)";
+        for (let x = gx; x <= gx + gw; x += 4) b.fillRect(x, gy, 1, gh);
+        for (let y = gy; y <= vGround; y += 4) b.fillRect(gx, y, gw, 1);
+        // Posts + crossbar.
+        b.fillStyle = "#f2f6f4";
+        b.fillRect(gx, gy, 2, gh);
+        b.fillRect(gx + gw - 2, gy, 2, gh);
+        b.fillRect(gx, gy, gw, 2);
+      }
+
+      // The price line for the chosen country, e.g. "1 USD = 1767 MXN".
+      function adPriceText() {
+        const rt = RATES[playerCountry];
+        return rt ? `1 USD = ${rt.rate} ${rt.cur}` : "RIA MONEY TRANSFER";
+      }
+
+      function drawBackground() {
+        const b = bctx;
+
+        // --- Sky strip behind the upper stands (theme-tinted) ---
+        b.fillStyle = bgTheme.sky[0][1];
+        b.fillRect(0, 0, vW, vGround);
+
+        // --- Stands block + crowd ---
+        const standsBottom = Math.round(vH * 0.17);
+        b.fillStyle = "#241f38";
+        b.fillRect(0, 0, vW, standsBottom);
+        // Optional night sparkle in the stands sky.
+        if (stars.length) {
+          b.fillStyle = "rgba(255,255,255,0.7)";
+          for (const s of stars) b.fillRect(Math.round(s.x / PX), Math.round(s.y / PX), 1, 1);
+        }
+        for (const f of crowd) {
+          b.fillStyle = f.jersey;          // torso / shoulders
+          b.fillRect(f.x, f.y + 2, 4, 4);
+          b.fillStyle = "#e8b890";         // head
+          b.fillRect(f.x + 1, f.y, 2, 2);
+        }
+
+        // --- Stadium wall between crowd and the pitch ---
+        b.fillStyle = "#1b2230";
+        b.fillRect(0, standsBottom, vW, vGround - standsBottom);
+        b.fillStyle = "#11131c";
+        b.fillRect(0, standsBottom, vW, 1);
+
+        // --- Advertising board (just the bar here; the text + logo are
+        //     painted sharp in drawAdOverlay on a finer pixel grid). ---
+        adVH = Math.max(9, Math.round(vH * 0.052));
+        adVY = vGround - adVH;
+        b.fillStyle = "#0b0e13";
+        b.fillRect(0, adVY, vW, adVH);
+        b.fillStyle = "#3a4252";       // top + bottom rails
+        b.fillRect(0, adVY - 1, vW, 1);
+        b.fillRect(0, vGround - 1, vW, 1);
+
+        // --- Pitch: vertical mowing stripes (theme greens) ---
+        const stripeW = Math.max(6, Math.round(vW / 9));
+        for (let x = 0, i = 0; x < vW; x += stripeW, i++) {
+          b.fillStyle = i % 2 ? bgTheme.grass[1] : bgTheme.grass[0];
+          b.fillRect(x, vGround, stripeW, vH - vGround);
+        }
+
+        // --- Touchline marking ---
+        // (The goal is drawn in the foreground pass so it sits IN FRONT of the
+        //  ad board, which is composited between the backdrop and foreground.)
+        b.fillStyle = "#eef3f0";
+        b.fillRect(0, vGround, vW, 1);
+      }
+
+      // Chunky pixel-art footballer in the country kit. Built from the same
+      // body proportions as the physics (so the head still lines up with the
+      // bounce check), but every rectangle is snapped to the `pp` pixel grid.
+      // Used in-game (c = bctx, pp = PX) and on the game-over card.
+      function drawPlayer(c, pp, cx, feetY) {
+        const kit = KITS[playerCountry] || DEFAULT_KIT;
+        const SKIN = "#e7b48b", SKIN_SH = "#c98a5e";
+        const HAIR = "#2c2018", BOOT = "#141414", SHORT = "#16203a";
         const hipY = feetY - LEG_HEIGHT;
         const shoulderY = hipY - TORSO_HEIGHT;
-        const head = { x: px, y: feetY - HEAD_CENTRE_FROM_FEET };
+        const headCY = feetY - HEAD_CENTRE_FROM_FEET;
+        const headTop = headCY - HEAD_RADIUS;
+        const R = HEAD_RADIUS;
+        const r = (x, y, w, h, col) => pxRect(c, pp, x, y, w, h, col);
 
-        // Flat palette — change here to retheme the player.
-        const SKIN_LIGHT = "#eee5d3";
-        const SKIN_SHADOW = "#7d7872";
-        const HAIR = "#a8a8a2";
-        const BROW = "#161616";
-        // Jersey colours follow the selected country's kit.
-        const kit = KITS[playerCountry] || DEFAULT_KIT;
-        const JERSEY = kit.jersey;
-        const JERSEY_SHADOW = kit.shadow;
-        const COLLAR = kit.collar;
-        const TRIM = kit.trim;
-        const LEG = "#161821";
-
-        // Drop shadow under the feet.
-        c.save();
-        c.translate(px, feetY + 2);
-        c.scale(1, 0.32);
-        c.fillStyle = "rgba(0, 0, 0, 0.4)";
-        c.beginPath();
-        c.arc(0, 0, 26, 0, Math.PI * 2);
-        c.fill();
-        c.restore();
-
-        // ---- Legs ----
-        // Dark rectangles with a 2px inside-edge highlight to suggest a
-        // plane break (very subtle at this scale, but reads with the rest).
-        c.fillStyle = LEG;
-        c.fillRect(px - 12, hipY, 9, LEG_HEIGHT);
-        c.fillRect(px + 3, hipY, 9, LEG_HEIGHT);
-        c.fillStyle = "rgba(255,255,255,0.08)";
-        c.fillRect(px - 12, hipY, 2, LEG_HEIGHT);
-        c.fillRect(px + 3, hipY, 2, LEG_HEIGHT);
-        // Cleats.
-        c.fillStyle = "#0a0a0a";
-        c.fillRect(px - 15, feetY - 4, 15, 4);
-        c.fillRect(px, feetY - 4, 15, 4);
-
-        // ---- Torso / jersey ----
-        const tL = px - 18;
-        const tR = px + 18;
-        const tT = shoulderY;
-        const tB = hipY;
-        // Base jersey plane.
-        c.fillStyle = JERSEY;
-        c.fillRect(tL, tT, 36, TORSO_HEIGHT);
-        // Shadow plane on the right — angled cubist break.
-        c.fillStyle = JERSEY_SHADOW;
-        c.beginPath();
-        c.moveTo(px + 3, tT);
-        c.lineTo(tR, tT);
-        c.lineTo(tR, tB);
-        c.lineTo(px - 3, tB);
-        c.closePath();
-        c.fill();
-        // Collar band at the top + trim below it.
-        c.fillStyle = COLLAR;
-        c.fillRect(tL, tT, 36, 7);
-        c.fillStyle = TRIM;
-        c.fillRect(tL, tT + 7, 36, 2);
-        // Belt — collar-tone strip near the bottom of the jersey.
-        c.fillStyle = COLLAR;
-        c.fillRect(tL, tB - 5, 36, 4);
-
-        // ---- Arms ----
-        // Flat trapezoid sleeves in the jersey-shadow tone, with one light
-        // and one shadow hand to carry the bicolour conceit through.
-        c.fillStyle = JERSEY_SHADOW;
-        c.beginPath();
-        c.moveTo(tL, tT + 7);
-        c.lineTo(tL - 8, tT + 10);
-        c.lineTo(tL - 6, tT + 30);
-        c.lineTo(tL, tT + 28);
-        c.closePath();
-        c.fill();
-        c.beginPath();
-        c.moveTo(tR, tT + 7);
-        c.lineTo(tR + 8, tT + 10);
-        c.lineTo(tR + 6, tT + 30);
-        c.lineTo(tR, tT + 28);
-        c.closePath();
-        c.fill();
-        c.fillStyle = SKIN_LIGHT;
-        c.beginPath();
-        c.arc(tL - 6, tT + 32, 4, 0, Math.PI * 2);
-        c.fill();
-        c.fillStyle = SKIN_SHADOW;
-        c.beginPath();
-        c.arc(tR + 6, tT + 32, 4, 0, Math.PI * 2);
-        c.fill();
-
-        // ---- Head ----
-        // 1) Light-skin base disc.
-        c.fillStyle = SKIN_LIGHT;
-        c.beginPath();
-        c.arc(head.x, head.y, HEAD_RADIUS, 0, Math.PI * 2);
-        c.fill();
-
-        // 2) Clip to the head and paint the shadow plane + features inside.
-        c.save();
-        c.beginPath();
-        c.arc(head.x, head.y, HEAD_RADIUS, 0, Math.PI * 2);
-        c.clip();
-
-        // Shadow plane on the right — vertical slab, angled inward at the
-        // chin for the geometric "two halves of a face" look.
-        c.fillStyle = SKIN_SHADOW;
-        c.beginPath();
-        c.moveTo(head.x + HEAD_RADIUS * 0.05, head.y - HEAD_RADIUS);
-        c.lineTo(head.x + HEAD_RADIUS, head.y - HEAD_RADIUS);
-        c.lineTo(head.x + HEAD_RADIUS, head.y + HEAD_RADIUS);
-        c.lineTo(head.x + HEAD_RADIUS * 0.25, head.y + HEAD_RADIUS);
-        c.closePath();
-        c.fill();
-
-        // Hair — flat angular cap across the top of the head.
-        c.fillStyle = HAIR;
-        c.beginPath();
-        c.moveTo(head.x - HEAD_RADIUS, head.y - HEAD_RADIUS * 0.15);
-        c.lineTo(head.x - HEAD_RADIUS * 0.55, head.y - HEAD_RADIUS);
-        c.lineTo(head.x + HEAD_RADIUS * 0.5, head.y - HEAD_RADIUS);
-        c.lineTo(head.x + HEAD_RADIUS, head.y - HEAD_RADIUS * 0.55);
-        c.lineTo(head.x + HEAD_RADIUS, head.y - HEAD_RADIUS * 0.28);
-        c.lineTo(head.x + HEAD_RADIUS * 0.55, head.y - HEAD_RADIUS * 0.38);
-        c.lineTo(head.x - HEAD_RADIUS * 0.4, head.y - HEAD_RADIUS * 0.32);
-        c.closePath();
-        c.fill();
-
-        // Heavy brow — thick dark slab under the hairline.
-        c.fillStyle = BROW;
-        c.fillRect(
-          head.x - HEAD_RADIUS * 0.65,
-          head.y - HEAD_RADIUS * 0.2,
-          HEAD_RADIUS * 1.25,
-          Math.max(2, HEAD_RADIUS * 0.18)
-        );
-
-        // Angular nose — small dark triangle pointing down-right.
-        c.fillStyle = BROW;
-        c.beginPath();
-        c.moveTo(head.x + HEAD_RADIUS * 0.1, head.y - HEAD_RADIUS * 0.02);
-        c.lineTo(head.x + HEAD_RADIUS * 0.55, head.y + HEAD_RADIUS * 0.28);
-        c.lineTo(head.x + HEAD_RADIUS * 0.18, head.y + HEAD_RADIUS * 0.3);
-        c.closePath();
-        c.fill();
-
-        // Tiny ear nub on the left side of the head.
-        c.fillStyle = SKIN_LIGHT;
-        c.beginPath();
-        c.arc(
-          head.x - HEAD_RADIUS * 0.92,
-          head.y + HEAD_RADIUS * 0.1,
-          HEAD_RADIUS * 0.18,
-          0,
-          Math.PI * 2
-        );
-        c.fill();
-
-        c.restore();
-
-        // Crisp outline so the head silhouette pops against the pitch.
-        c.lineWidth = 1.3;
-        c.strokeStyle = "rgba(0,0,0,0.55)";
-        c.beginPath();
-        c.arc(head.x, head.y, HEAD_RADIUS, 0, Math.PI * 2);
-        c.stroke();
+        // Ground shadow.
+        r(cx - 22, feetY - 3, 44, 4, "rgba(0,0,0,0.28)");
+        // Boots.
+        r(cx - 16, feetY - 6, 14, 6, BOOT);
+        r(cx + 2,  feetY - 6, 14, 6, BOOT);
+        // Legs.
+        r(cx - 12, hipY + 6, 9, LEG_HEIGHT - 12, SKIN);
+        r(cx + 3,  hipY + 6, 9, LEG_HEIGHT - 12, SKIN);
+        // Torso jersey + shaded right half.
+        r(cx - 18, shoulderY, 36, TORSO_HEIGHT, kit.jersey);
+        r(cx,      shoulderY, 18, TORSO_HEIGHT, kit.shadow);
+        // Collar band + chest trim stripe.
+        r(cx - 18, shoulderY,      36, 8, kit.collar);
+        r(cx - 18, shoulderY + 14, 36, 4, kit.trim);
+        // Arms (one lit, one shadow) + hands.
+        r(cx - 27, shoulderY + 6, 9, 30, kit.jersey);
+        r(cx + 18, shoulderY + 6, 9, 30, kit.shadow);
+        r(cx - 27, shoulderY + 34, 9, 7, SKIN);
+        r(cx + 18, shoulderY + 34, 9, 7, SKIN_SH);
+        // Shorts (over the torso bottom + leg tops).
+        r(cx - 16, hipY - 2, 32, 16, SHORT);
+        // Neck.
+        r(cx - 6, headCY + R - 6, 12, 8, SKIN);
+        // Head + shaded right half.
+        r(cx - R, headTop, 2 * R, 2 * R, SKIN);
+        r(cx,     headTop, R,     2 * R, SKIN_SH);
+        // Hair cap.
+        r(cx - R, headTop, 2 * R, 12, HAIR);
+        // Brow / eye band.
+        r(cx - R + 4, headCY - 4, 2 * R - 8, 5, "#1a1a1a");
       }
 
-      // White sphere with radial-gradient shading + drop shadow.
+      // Pixel ball — flat white disc with a few dark "pentagon" pixels, drawn
+      // into the low-res buffer (the arc comes out chunky once upscaled).
       function drawBall() {
-        const heightAbove = groundY - ball.y;
-        const heightFrac = Math.max(0, Math.min(1, heightAbove / (H * 0.55)));
-        const shadowAlpha = 0.4 * (1 - heightFrac * 0.65);
-        const shadowScale = Math.max(0.45, 1 - heightFrac * 0.5);
-        ctx.save();
-        ctx.translate(ball.x, groundY + BALL_RADIUS * 0.15);
-        ctx.scale(shadowScale, 0.3);
-        ctx.fillStyle = `rgba(0,0,0,${shadowAlpha.toFixed(3)})`;
-        ctx.beginPath();
-        ctx.arc(0, 0, BALL_RADIUS, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        const b = bctx;
+        const bx = ball.x / PX, by = ball.y / PX;
+        const rad = Math.max(2, BALL_RADIUS / PX);
 
-        ctx.save();
-        ctx.translate(ball.x, ball.y);
+        // Ground shadow — shrinks as the ball rises.
+        const heightFrac = Math.max(0, Math.min(1, (groundY - ball.y) / (H * 0.55)));
+        b.fillStyle = `rgba(0,0,0,${(0.3 * (1 - heightFrac * 0.6)).toFixed(2)})`;
+        b.beginPath();
+        b.ellipse(bx, vGround, rad * (1 - heightFrac * 0.4), Math.max(1, rad * 0.4), 0, 0, Math.PI * 2);
+        b.fill();
 
-        // Body — lit from the upper-left.
-        const body = ctx.createRadialGradient(
-          -BALL_RADIUS * 0.32, -BALL_RADIUS * 0.38, 0,
-          0, 0, BALL_RADIUS * 1.05
-        );
-        body.addColorStop(0, "#ffffff");
-        body.addColorStop(0.4, "#f0f0f0");
-        body.addColorStop(0.82, "#a8a8a8");
-        body.addColorStop(1, "#666666");
-        ctx.fillStyle = body;
-        ctx.beginPath();
-        ctx.arc(0, 0, BALL_RADIUS, 0, Math.PI * 2);
-        ctx.fill();
+        // Body.
+        b.fillStyle = "#f4f4f4";
+        b.beginPath();
+        b.arc(bx, by, rad, 0, Math.PI * 2);
+        b.fill();
+        // Edge ring.
+        b.strokeStyle = "rgba(0,0,0,0.45)";
+        b.lineWidth = 1;
+        b.beginPath();
+        b.arc(bx, by, rad, 0, Math.PI * 2);
+        b.stroke();
+        // Pentagon pixels.
+        b.fillStyle = "#1c1c1c";
+        b.fillRect(Math.round(bx) - 1, Math.round(by) - 1, 2, 2);
+        b.fillRect(Math.round(bx - rad + 1), Math.round(by + 1), 1, 1);
+        b.fillRect(Math.round(bx + rad - 2), Math.round(by - 1), 1, 1);
+        b.fillRect(Math.round(bx), Math.round(by + rad - 2), 1, 1);
+      }
 
-        // Specular hotspot.
-        const spec = ctx.createRadialGradient(
-          -BALL_RADIUS * 0.34, -BALL_RADIUS * 0.4, 0,
-          -BALL_RADIUS * 0.34, -BALL_RADIUS * 0.4, BALL_RADIUS * 0.42
-        );
-        spec.addColorStop(0, "rgba(255,255,255,0.95)");
-        spec.addColorStop(0.6, "rgba(255,255,255,0.25)");
-        spec.addColorStop(1, "rgba(255,255,255,0)");
-        ctx.fillStyle = spec;
-        ctx.beginPath();
-        ctx.arc(-BALL_RADIUS * 0.34, -BALL_RADIUS * 0.4, BALL_RADIUS * 0.42, 0, Math.PI * 2);
-        ctx.fill();
+      // Largest "Press Start 2P" size (capped at basePx) that fits `text`
+      // within `maxW`. The font's blocky glyphs give the pixel look.
+      const AD_FONT = "'Press Start 2P', monospace";
+      function fitAdFont(a, text, maxW, basePx) {
+        a.font = basePx + "px " + AD_FONT;
+        const w = a.measureText(text).width || 1;
+        const px = w > maxW ? Math.max(5, Math.floor(basePx * maxW / w)) : basePx;
+        a.font = px + "px " + AD_FONT;
+        return px;
+      }
 
-        // Edge.
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = "rgba(0,0,0,0.18)";
-        ctx.beginPath();
-        ctx.arc(0, 0, BALL_RADIUS, 0, Math.PI * 2);
-        ctx.stroke();
+      // The ad-board text + logo. Drawn 1:1 over the board strip after the
+      // main blit, using a pixel font so the lettering reads as pixel art.
+      function drawAdOverlay() {
+        if (!adVH) return;
+        const sy = H / vH;
+        const boardY = adVY * sy;
+        const boardH = adVH * sy;
+        const aw = Math.max(1, Math.round(W));
+        const ah = Math.max(1, Math.round(boardH));
+        adBuf.width = aw;
+        adBuf.height = ah;
+        const a = adBuf.getContext("2d");
+        a.clearRect(0, 0, aw, ah);
+        a.textBaseline = "middle";
+        a.textAlign = "left";
+        const cyA = ah / 2 + 1;
+        const basePx = Math.max(6, ah - 8);
 
-        ctx.restore();
+        if (Math.floor(adTime / 3.5) % 2 === 0) {
+          // Slide 1 — the price.
+          const txt = adPriceText();
+          fitAdFont(a, txt, aw * 0.95, basePx);
+          a.fillStyle = "#ffd23a";
+          a.fillText(txt, Math.round((aw - a.measureText(txt).width) / 2), cyA);
+        } else {
+          // Slide 2 — logo + riamoneytransfer.com, centred as a group.
+          const txt = "RIAMONEYTRANSFER.COM";
+          const logoH = ah - 2;
+          const logoW = adLogoReady ? Math.round(logoH * (adLogo.width / adLogo.height)) : 0;
+          const gap = logoW ? 6 : 0;
+          fitAdFont(a, txt, aw * 0.95 - logoW - gap, basePx);
+          const txtW = a.measureText(txt).width;
+          let x = Math.round((aw - (logoW + gap + txtW)) / 2);
+          if (adLogoReady) {
+            // Pixelate: shrink the logo to a small canvas, then nearest-
+            // neighbour upscale it so it's blocky like the rest of the art.
+            const LP = 3; // pixelation factor
+            const sw = Math.max(1, Math.round(logoW / LP));
+            const sh = Math.max(1, Math.round(logoH / LP));
+            adLogoTmp.width = sw;
+            adLogoTmp.height = sh;
+            const t = adLogoTmp.getContext("2d");
+            t.imageSmoothingEnabled = true;
+            t.clearRect(0, 0, sw, sh);
+            t.drawImage(adLogo, 0, 0, sw, sh);
+            a.imageSmoothingEnabled = false;
+            a.drawImage(adLogoTmp, 0, 0, sw, sh, x, 1, logoW, logoH);
+            x += logoW + gap;
+          }
+          a.fillStyle = "#f4f6f8";
+          a.fillText(txt, x, cyA);
+        }
+
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(adBuf, 0, 0, aw, ah, 0, boardY, aw, boardH);
       }
 
       // ---------------------- main loop ----------------------
@@ -1406,13 +1366,31 @@
       function loop(now) {
         const dt = Math.min((now - lastT) / 1000, 0.05);
         lastT = now;
+        adTime += dt; // drives the ad-board slide swap
         if (alive) {
           tickPlayer(dt);
           tickBall(dt);
         }
+        ctx.imageSmoothingEnabled = false;
+        ctx.clearRect(0, 0, W, H);
+
+        // Pass 1 — backdrop (crowd, wall, pitch, ad bar) behind the ads.
+        bctx.clearRect(0, 0, vW, vH);
         drawBackground();
-        drawPlayer();
+        ctx.drawImage(buf, 0, 0, vW, vH, 0, 0, W, H);
+
+        // Ad board text + logo — sits in front of the bar but BEHIND the
+        // goal and player.
+        drawAdOverlay();
+
+        // Pass 2 — foreground (goal, player, ball) on a transparent buffer,
+        // composited on top of the ads.
+        bctx.clearRect(0, 0, vW, vH);
+        drawGoal(bctx);
+        drawPlayer(bctx, PX, player.x, groundY);
         drawBall();
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(buf, 0, 0, vW, vH, 0, 0, W, H);
         requestAnimationFrame(loop);
       }
 
