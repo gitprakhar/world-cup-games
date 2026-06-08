@@ -536,7 +536,7 @@
       </div>
       <div class="picker-bottom">
         <select id="country-select"></select>
-        <button id="start-btn" type="button">Start playing</button>
+        <button id="start-btn" type="button">Next</button>
       </div>
       <div class="home-ticker">
         <div class="ticker-track" id="ticker-track"></div>
@@ -1101,19 +1101,22 @@
       }
       window.addEventListener("resize", resize);
 
-      function resetForRun() {
-        player.x = W / 2;
-        // Drop the ball close to the player so the very first header is
-        // reachable even on keyboard — fixed pixel range (not a fraction of
-        // W) so wide desktops don't push the ball to a far corner where the
-        // arrow keys can't catch up in time.
+      // Drop a fresh ball from the top, near the player's CURRENT position, so
+      // it's reachable. Doesn't move the player.
+      function dropBall() {
         const FIRST_DROP_HALF_RANGE = 110;
         ball.x = player.x + (Math.random() * 2 - 1) * FIRST_DROP_HALF_RANGE;
+        ball.x = Math.max(BALL_RADIUS, Math.min(W - BALL_RADIUS, ball.x));
         ball.y = -BALL_RADIUS - 10;
         ball.vx = 0;
         ball.vy = 80; // small initial nudge so the drop feels purposeful
         ball.spin = 0;
         ball.vSpin = 0;
+      }
+
+      function resetForRun() {
+        player.x = W / 2; // a real run re-centres the player
+        dropBall();
       }
 
       // Lay out a starfield for the current viewport (only used by night).
@@ -1358,15 +1361,15 @@
           }
         }
 
-        // Ball hits the ground.
-        if (ball.y + BALL_RADIUS >= groundY) {
-          if (inTutorial) {
-            resetForRun(); // practice: drop a fresh ball, keep going
-          } else {
-            ball.y = groundY - BALL_RADIUS;
-            ball.vy = 0;
-            endGame();
-          }
+        if (inTutorial) {
+          // Practice: a miss just keeps falling off the bottom of the screen,
+          // then a fresh ball drops in — the player stays where they are.
+          if (ball.y - BALL_RADIUS > H) dropBall();
+        } else if (ball.y + BALL_RADIUS >= groundY) {
+          // Real run: reaching the feet line ends the game.
+          ball.y = groundY - BALL_RADIUS;
+          ball.vy = 0;
+          endGame();
         }
       }
 
