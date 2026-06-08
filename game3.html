@@ -218,12 +218,9 @@
         text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
       }
       .tutorial[hidden] { display: none; }
-      .tut-phone { width: 56px; height: 56px; animation: tiltPhone 1.7s ease-in-out infinite; }
+      /* Rotation is set in JS from the live device tilt (see the loop). */
+      .tut-phone { width: 56px; height: 56px; transition: transform 0.06s linear; }
       .tut-phone svg { width: 100%; height: 100%; display: block; shape-rendering: crispEdges; }
-      @keyframes tiltPhone {
-        0%, 100% { transform: rotate(-24deg); }
-        50%      { transform: rotate(24deg); }
-      }
       .tut-text { margin-top: 18px; font-size: 12px; letter-spacing: 0.06em; }
       #tutorial-start {
         margin-top: 28px;
@@ -497,7 +494,7 @@
 
       <!-- How-to-play tilt demo (mobile, only when motion is allowed). -->
       <div class="tutorial" id="tutorial" hidden>
-        <div class="tut-phone">
+        <div class="tut-phone" id="tut-phone">
           <svg viewBox="0 0 16 24">
             <rect x="2" y="1" width="12" height="22" fill="#ffffff"/>
             <rect x="3" y="3" width="10" height="16" fill="#16284f"/>
@@ -685,6 +682,7 @@
         btnSound: document.getElementById("btn-sound"),
         btnPause: document.getElementById("btn-pause"),
         tutorial: document.getElementById("tutorial"),
+        tutPhone: document.getElementById("tut-phone"),
         tutorialStart: document.getElementById("tutorial-start"),
         hint: document.getElementById("hint"),
         gameover: document.getElementById("gameover"),
@@ -1668,6 +1666,10 @@
             tickBall(dt);
           } else if (inTutorial) {
             tickPlayer(dt); // demo: player follows tilt, no ball yet
+            // Rotate the phone icon by the actual tilt (1:1, clamped) so it
+            // matches how much the player is tilting / how the player moves.
+            const deg = Math.max(-35, Math.min(35, tiltDelta));
+            ui.tutPhone.style.transform = `rotate(${deg}deg)`;
           }
           updatePlayerAnim(dt);
         }
@@ -1713,6 +1715,8 @@
       function startTutorial() {
         inTutorial = true;
         player.x = W / 2;
+        tiltZero = null; // calibrate rest angle to how they're holding it now
+        tiltDelta = 0;
         ui.hint.style.opacity = "0";
         ui.tutorial.hidden = false;
         ui.tutorialStart.hidden = true;
