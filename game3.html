@@ -9,6 +9,22 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
     <style>
+      /* =================================================================
+         16-BIT PALETTE — tweak these to recolour the whole UI. The canvas
+         art reads the matching JS `PALETTE` object (top of the script).
+         ================================================================= */
+      :root {
+        --ui-blue:      #3a6fd0;  /* panel / badge fill        */
+        --ui-blue-lt:   #6fa3f0;  /* top-left bevel highlight   */
+        --ui-blue-dk:   #21408a;  /* bottom-right bevel shadow  */
+        --ui-inset:     #16284f;  /* recessed score box         */
+        --ui-outline:   #0b1430;  /* hard outer outline         */
+        --ui-text:      #ffffff;
+        --ui-gold:      #ffd23a;  /* numbers + icons            */
+        --btn-orange:   #f2913a;
+        --btn-orange-dk:#c96f1f;
+      }
+
       *, *::before, *::after {
         box-sizing: border-box;
         -webkit-tap-highlight-color: transparent;
@@ -96,128 +112,62 @@
       }
       .go-player { image-rendering: pixelated; image-rendering: -moz-crisp-edges; }
 
-      .scoreboard {
-        position: absolute;
-        top: max(env(safe-area-inset-top, 0px), 16px);
-        left: 16px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        pointer-events: none;
+      /* ---------------- TOP HUD (16-bit beveled pixel UI) ----------------
+         Shared bevel: hard inset highlights/shadows (no blur, no radius) and
+         a crisp dark outline. `.px-panel` is the reusable chrome. */
+      .px-panel {
+        background: var(--ui-blue);
+        border: 3px solid var(--ui-outline);
+        box-shadow:
+          inset 3px 3px 0 0 var(--ui-blue-lt),   /* top-left highlight  */
+          inset -3px -3px 0 0 var(--ui-blue-dk), /* bottom-right shadow */
+          0 4px 0 0 rgba(0, 0, 0, 0.35);         /* drop shadow         */
+        font-family: "Press Start 2P", monospace;
+        color: var(--ui-text);
+        image-rendering: pixelated;
       }
-      .stat {
-        background: rgba(0, 0, 0, 0.55);
-        padding: 8px 14px;
-        border-radius: 999px;
-        font-size: 14px;
-        font-weight: 600;
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
-      }
-      .stat-headers { font-size: 22px; font-weight: 800; }
-
-      /* Big centred country header — flag + name + live score. The national
-         colour (set per-country via --accent) tints the border + glow so the
-         player's country is front-and-centre while they play. */
-      .country-header {
-        position: absolute;
-        top: max(env(safe-area-inset-top, 0px), 16px);
-        left: 50%;
-        transform: translateX(-50%);
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        padding: 11px 24px;
-        background: rgba(0, 0, 0, 0.58);
-        border: 2px solid var(--accent, rgba(253, 230, 138, 0.45));
-        border-radius: 999px;
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-        pointer-events: none;
-        z-index: 2;
-        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
-        white-space: nowrap;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45),
-                    0 0 22px -4px var(--accent, transparent);
-      }
-      /* One-time entrance pop, re-triggered each run by toggling .reveal. */
-      .country-header.reveal { animation: headerReveal 0.6s cubic-bezier(0.22, 1.4, 0.4, 1); }
-      @keyframes headerReveal {
-        0%   { transform: translateX(-50%) translateY(-26px) scale(0.7); opacity: 0; }
-        60%  { transform: translateX(-50%) translateY(4px) scale(1.06); }
-        100% { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; }
-      }
-      .header-flag {
-        font-size: 38px;
-        line-height: 1;
-        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55));
-      }
-      .header-name {
-        font-size: 19px;
-        font-weight: 800;
-        color: #ffffff;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-      }
-      .header-score {
-        font-size: 32px;
-        font-weight: 900;
-        color: #ffffff;
-        font-variant-numeric: tabular-nums;
-        min-width: 56px;
-        text-align: right;
-        line-height: 1;
-      }
-      .header-score.pop {
-        animation: scorePop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
-      }
-      @keyframes scorePop {
-        0%   { transform: scale(1);    color: #ffffff; }
-        35%  { transform: scale(1.25); color: #fde047; }
-        100% { transform: scale(1);    color: #ffffff; }
+      .px-inset { /* recessed dark box (score readout) */
+        background: var(--ui-inset);
+        box-shadow:
+          inset 2px 2px 0 0 rgba(0, 0, 0, 0.55),
+          inset -2px -2px 0 0 rgba(255, 255, 255, 0.08);
       }
 
+      /* Single HUD pane (top-left): compact top-3 (+ your country). */
       .leaderboard {
         position: absolute;
-        top: max(env(safe-area-inset-top, 0px), 16px);
-        right: 16px;
-        width: 200px;
-        max-height: 70vh;
-        overflow: auto;
-        background: rgba(0, 0, 0, 0.55);
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-        border-radius: 12px;
-        padding: 10px 12px 8px;
-        font-size: 13px;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+        top: max(env(safe-area-inset-top, 0px), 12px);
+        left: 12px;
+        width: 138px;
+        padding: 8px 9px 7px;
+        font-family: "Press Start 2P", monospace;
+        color: var(--ui-text);
         pointer-events: none;
       }
       .lb-title {
-        font-size: 11px;
-        letter-spacing: 0.2em;
-        text-transform: uppercase;
-        opacity: 0.7;
-        margin-bottom: 4px;
+        font-size: 7px;
+        letter-spacing: 0.06em;
+        color: #cde0ff;
+        margin-bottom: 7px;
       }
       .lb-row {
         display: grid;
-        grid-template-columns: 18px 22px 1fr auto;
+        grid-template-columns: 12px 18px 1fr auto;
         align-items: center;
         gap: 6px;
-        padding: 3px 2px;
-        border-radius: 6px;
-        font-variant-numeric: tabular-nums;
+        padding: 4px 2px;
+        font-size: 10px;
       }
       .lb-row.you {
-        background: rgba(253, 230, 138, 0.18);
-        color: #fde68a;
-        font-weight: 700;
+        background: var(--ui-inset);
+        box-shadow: inset 2px 2px 0 0 rgba(0,0,0,0.5), inset -2px -2px 0 0 rgba(255,255,255,0.08);
+        color: var(--ui-gold);
       }
-      .lb-rank { opacity: 0.55; font-size: 11px; }
-      .lb-flag { font-size: 16px; line-height: 1; }
+      .lb-rank { color: #9ab4e6; }
+      .lb-flag { font-size: 16px; line-height: 1; font-family: initial; }
       .lb-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .lb-score { color: var(--ui-gold); }
+      .lb-row.you .lb-name { color: var(--ui-gold); }
 
       .hint {
         position: absolute;
@@ -434,23 +384,11 @@
       .gameover-card .lb-flag { font-size: 16px; line-height: 1; }
       .gameover-card .lb-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-      /* Small screens — push the side panels below the centred header so
-         they don't overlap, and shrink the leaderboard. */
-      @media (max-width: 600px) {
-        .scoreboard  { top: calc(max(env(safe-area-inset-top, 0px), 16px) + 56px); }
-        .leaderboard { top: calc(max(env(safe-area-inset-top, 0px), 16px) + 56px); }
-      }
+      /* Small screens — shrink the HUD pane a touch. */
       @media (max-width: 480px) {
-        /* Hide the live HUD leaderboard on phones — it crowds the playfield.
-           Players still see the full leaderboard (and their country) on the
-           game-over card. */
-        .leaderboard { display: none; }
-        .stat { padding: 7px 11px; font-size: 12px; }
-        .stat-headers { font-size: 18px; }
-        .country-header { padding: 7px 14px; gap: 10px; }
-        .header-flag { font-size: 22px; }
-        .header-name { font-size: 13px; letter-spacing: 0.04em; }
-        .header-score { font-size: 22px; min-width: 40px; }
+        .leaderboard { width: 122px; padding: 6px 7px; }
+        .lb-row { font-size: 9px; gap: 5px; }
+        .lb-flag { font-size: 13px; }
       }
     </style>
   </head>
@@ -469,19 +407,8 @@
     <div class="game" id="game" hidden>
       <canvas id="canvas"></canvas>
 
-      <div class="scoreboard">
-        <div class="stat stat-headers">⚡ <span id="headers">0</span></div>
-        <div class="stat">🏆 Best <span id="best">0</span></div>
-      </div>
-
-      <div class="country-header" id="country-header">
-        <div class="header-flag" id="header-flag">🇲🇽</div>
-        <div class="header-name" id="header-name">Mexico</div>
-        <div class="header-score" id="header-score">0</div>
-      </div>
-
-      <div class="leaderboard">
-        <div class="lb-title">🌎 Leaderboard</div>
+      <div class="leaderboard px-panel">
+        <div class="lb-title">🌎 TOP COUNTRIES</div>
         <div id="lb-rows"></div>
       </div>
 
@@ -510,6 +437,26 @@
 
     <script>
       // =================================================================
+      // 16-BIT PALETTE (canvas art) — mirrors the CSS :root vars used by the
+      // DOM HUD. Tweak here to recolour the pitch, crowd, goal, ball, etc.
+      // =================================================================
+      const PALETTE = {
+        sky:      "#36c0f0", skyTop:   "#5fd0f5",
+        stand:    "#566678", standDk:  "#3d4a5a",
+        wall:     "#9aa7b3", wallDk:   "#6e7c89",
+        pitchLt:  "#5cb84e", pitchDk:  "#46a23c",
+        line:     "#f2f7f2",
+        goal:     "#ffffff", goalDk:   "#b9c4cc", net: "#dce8e0",
+        ballLt:   "#ffffff", ballDk:   "#1a1a1a",
+        outline:  "#0b1430",
+        // Bright crowd shirts.
+        crowd: ["#e23b3b", "#2f6fd6", "#3fae4a", "#f2c531", "#d63a9e",
+                "#ef8a2b", "#2bbfae", "#8a3fd0", "#e8e8e8"],
+        // Sideline ad-board fills (placeholders).
+        ads: ["#d6403a", "#3a6fd0", "#f2c531", "#8a3fd0", "#2bbfae", "#ef8a2b"],
+      };
+
+      // =================================================================
       // COUNTRIES + LEADERBOARD STATE
       // =================================================================
       // [ISO-2, flag emoji, display name, seed score]. Seeds keep the
@@ -526,6 +473,12 @@
         ["PH", "🇵🇭", "Philippines", 173],
         ["IN", "🇮🇳", "India", 312],
       ];
+      // Short codes for the compact leaderboard (MX, ARG, …).
+      const ABBR = {
+        MX: "MX", CO: "COL", PE: "PER", CL: "CHI", AR: "ARG",
+        BR: "BRA", US: "USA", ES: "ESP", PH: "PHI", IN: "IND",
+      };
+
       // Per-country running totals — incremented on every successful header.
       // Plain in-memory map (no persistence, per spec).
       const scores = Object.fromEntries(
@@ -660,42 +613,55 @@
         ui.countrySelect.appendChild(opt);
       });
 
-      // Build the shared leaderboard markup once and reuse it for the live
-      // HUD board AND the end-of-run summary on the game-over card.
-      function buildLeaderboardHTML() {
+      // Build leaderboard rows. `compact` → just the top 3, plus the player's
+      // country as a 4th row if it isn't already in the top 3 (so it always
+      // shows where they stand). Otherwise the full ranking (game-over card).
+      function buildLeaderboardHTML(compact) {
         const ranked = COUNTRIES
           .map(([code, flag, name]) => ({ code, flag, name, score: scores[code] }))
-          .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
-        return ranked
+          .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+          .map((r, idx) => ({ ...r, rank: idx + 1 }));
+
+        let rows = ranked;
+        if (compact) {
+          rows = ranked.slice(0, 3);
+          if (!rows.some((r) => r.code === playerCountry)) {
+            const me = ranked.find((r) => r.code === playerCountry);
+            if (me) rows = rows.concat(me); // 4th row = your country
+          }
+        }
+        return rows
           .map(
-            (r, idx) => `
+            (r) => `
               <div class="lb-row${r.code === playerCountry ? " you" : ""}">
-                <span class="lb-rank">${idx + 1}</span>
+                <span class="lb-rank">${r.rank}</span>
                 <span class="lb-flag">${r.flag}</span>
-                <span class="lb-name">${r.name}</span>
-                <span>${r.score}</span>
+                <span class="lb-name">${ABBR[r.code] || r.code}</span>
+                <span class="lb-score">${r.score}</span>
               </div>`
           )
           .join("");
       }
 
-      // Live HUD leaderboard — refreshed on every header.
+      // Live HUD leaderboard — compact top-3 (+ you), refreshed each header.
       function renderLeaderboard() {
-        ui.lbRows.innerHTML = buildLeaderboardHTML();
+        ui.lbRows.innerHTML = buildLeaderboardHTML(true);
       }
 
-      // End-of-run snapshot — populated when the game-over card opens.
+      // End-of-run snapshot — full ranking on the game-over card.
       function renderGameoverLeaderboard() {
-        ui.gameoverLbRows.innerHTML = buildLeaderboardHTML();
+        ui.gameoverLbRows.innerHTML = buildLeaderboardHTML(false);
       }
 
       function setHeaders(n) {
+        // `headers`/`best` still track the run for the game-over card; their
+        // live HUD badges were removed, so update those readouts only if present.
         headers = n;
-        ui.headers.textContent = String(n);
+        if (ui.headers) ui.headers.textContent = String(n);
         if (n > best) {
           best = n;
           newBestThisRun = n > 0;
-          ui.best.textContent = String(n);
+          if (ui.best) ui.best.textContent = String(n);
         }
       }
 
@@ -707,20 +673,22 @@
           .indexOf(code) + 1;
       }
 
+      // The dedicated country panel was merged into the single leaderboard
+      // pane; these stay as guarded no-ops so the call sites don't need to
+      // change (the leaderboard's highlighted row now shows your country).
       function setCountryHeader() {
+        if (!ui.countryHeader) return;
         const entry = COUNTRIES.find(([code]) => code === playerCountry);
         if (!entry) return;
         ui.headerFlag.textContent = entry[1];
         ui.headerName.textContent = entry[2];
         ui.headerScore.textContent = String(scores[playerCountry]);
-        // Tint the banner with the national kit colour.
         const kit = KITS[playerCountry] || DEFAULT_KIT;
         ui.countryHeader.style.setProperty("--accent", kit.jersey);
       }
 
-      // Re-trigger the .pop animation each header so the number visibly
-      // punches even on rapid-fire bounces.
       function pulseCountryScore() {
+        if (!ui.headerScore) return;
         ui.headerScore.textContent = String(scores[playerCountry]);
         ui.headerScore.classList.remove("pop");
         void ui.headerScore.offsetWidth; // force reflow
@@ -787,13 +755,72 @@
       const player = { x: 0 };
       const ball = { x: 0, y: 0, vx: 0, vy: 0, spin: 0, vSpin: 0 };
 
+      // ---- player sprite (5 separate frames) ----
+      // Header/jump sequence: 0 idle · 1 crouch · 2 rising · 3 contact · 4 land.
+      // Swap the player-frameN.png files to re-skin; nothing here is hardcoded.
+      const PLAYER_FRAMES = [];
+      let playerFramesReady = 0;
+      for (let i = 1; i <= 5; i++) {
+        const img = new Image();
+        img.onload = () => { playerFramesReady++; };
+        img.src = `player-frame${i}.png`;
+        PLAYER_FRAMES.push(img);
+      }
+      let playerFrame = 0; // which frame to draw right now (idle by default)
+
+      // Football sprite (swap football.png to re-skin). The ball fills the
+      // image height, so its on-screen diameter = drawn height.
+      const ballImg = new Image();
+      ballImg.src = "football.png";
+
+      // Pre-rendered stadium backdrop used on phones (crowd + ad boards + goal
+      // + pitch baked in). On mobile we draw this instead of the procedural
+      // scene, then overlay the player, ball, and the DOM HUD.
+      const bgMobileImg = new Image();
+      bgMobileImg.src = "background-mobile.png";
+      const BALL_VISUAL_SCALE = 1.2; // ball drawn bigger than its hitbox, for looks
+      const MOBILE_MAX_W = 600;   // ≤ this viewport width counts as "mobile"
+      let mobileMode = false;     // set in resize()
+      const BG_BLUR = 5;          // px — background blur to push focus to the player
+
+      // Source frame geometry + where the figure sits inside the frame. The
+      // sprite is scaled so the feet land on `groundY` and the head-centre
+      // lands on the existing ball-contact point — tweak the two fractions if
+      // the head/feet don't line up perfectly.
+      const SPR_W = 96, SPR_H = 215;
+      const SPR_FEET_FRAC = 0.95; // feet position down the frame (0=top,1=bottom)
+      const SPR_HEAD_FRAC = 0.15; // head-centre position down the frame
+      const PLAYER_SCALE = 2.5;   // size multiplier (anchored at the head)
+      const PLAYER_Y_OFFSET = -70; // px to nudge the sprite up the frame
+
+      // Header animation tuning. The wind-up (crouch→rising) is driven by the
+      // descending ball's distance to the head, so frame 3 (contact) lands on
+      // the real bounce; afterwards a short timer plays frame 3 then 4 → idle.
+      const WINDUP_DIST = 150;    // px above the head where the wind-up begins
+      const CONTACT_DUR = 0.12;   // s holding frame 3 (contact) after a header
+      const LAND_DUR    = 0.20;   // s holding frame 4 (landing) after that
+      let contactTimer = 0;       // counts down through the post-contact frames
+
       // ---- pixel-art buffer ----
       // The whole scene is drawn into a tiny offscreen canvas in "virtual
       // pixels", then upscaled to the screen with smoothing OFF — that hard
       // nearest-neighbour blow-up is what gives the chunky 8-bit look.
       let PX = 4;            // CSS px per virtual pixel
       let vW = 0, vH = 0;    // buffer size in virtual px
-      let vGround = 0;       // pitch line in virtual px
+      let vGround = 0;       // player's feet line in virtual px (physics)
+      let vPitchTop = 0;     // top edge of the green pitch (below the ad row)
+
+      // Vertical band layout of the stadium (all in virtual px). Shared by the
+      // crowd seeding and the scene drawing so they always line up. The pitch
+      // fills everything from `pitchTop` to the bottom of the screen.
+      function bands() {
+        const crowdTop = Math.round(vH * 0.015);
+        const crowdBottom = crowdTop + Math.round(vH * 0.135);
+        const barrierH = Math.max(2, Math.round(vH * 0.02));
+        const adY = crowdBottom + barrierH;
+        const adH = Math.max(9, Math.round(vH * 0.05));
+        return { crowdTop, crowdBottom, barrierH, adY, adH, pitchTop: adY + adH };
+      }
       const buf = document.createElement("canvas");
       const bctx = buf.getContext("2d");
       let crowd = [];        // precomputed fans {x, y, jersey} in virtual px
@@ -830,6 +857,7 @@
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.imageSmoothingEnabled = false;
         groundY = H * GROUND_FRAC;
+        mobileMode = W <= MOBILE_MAX_W;
 
         // Size the low-res buffer — aim for ~230 virtual px across.
         PX = Math.max(3, Math.round(W / 230));
@@ -853,18 +881,20 @@
       // Lay out the crowd: rows of little fans filling the top stands band.
       // Colours are fixed per seat (computed once) so the crowd doesn't
       // shimmer frame to frame.
-      const CROWD_SHIRTS = ["#2f6fd6", "#1b4fb0", "#d63a3a", "#e0a020",
-                            "#e8e8e8", "#3aa657", "#7a3ad6", "#d6943a"];
+      const CROWD_SKIN = ["#f0c39a", "#e0a877", "#c98a5e", "#9c6b43", "#7a4a2a"];
       function seedCrowd() {
         crowd = [];
-        const standsBottom = Math.round(vH * 0.17);
-        const cw = 6, chRow = 7;
+        const bd = bands();
+        const cw = 5, chRow = 5;       // tight packing for a dense crowd
         let row = 0;
-        for (let y = 2; y < standsBottom; y += chRow, row++) {
+        for (let y = bd.crowdTop; y < bd.crowdBottom; y += chRow, row++) {
           const off = (row % 2) * (cw / 2);
           for (let x = -cw; x < vW + cw; x += cw) {
-            const i = (row * 928 + Math.round(x)) % CROWD_SHIRTS.length;
-            crowd.push({ x: Math.round(x + off), y, jersey: CROWD_SHIRTS[(i + CROWD_SHIRTS.length) % CROWD_SHIRTS.length] });
+            // Stable pseudo-random pick per seat (no Math.random → no shimmer).
+            const h = (row * 73856093) ^ (Math.round(x) * 19349663);
+            const shirt = PALETTE.crowd[Math.abs(h) % PALETTE.crowd.length];
+            const skin = CROWD_SKIN[Math.abs(h >> 3) % CROWD_SKIN.length];
+            crowd.push({ x: Math.round(x + off), y, shirt, skin });
           }
         }
       }
@@ -917,10 +947,6 @@
         alive = true;
         ui.hint.style.opacity = "0.65";
         ui.gameover.hidden = true;
-        // Re-trigger the banner entrance pop for this run.
-        ui.countryHeader.classList.remove("reveal");
-        void ui.countryHeader.offsetWidth; // force reflow
-        ui.countryHeader.classList.add("reveal");
       }
 
       // Render the pixel footballer (in the country kit) onto the game-over
@@ -1066,7 +1092,8 @@
       }
 
       function headCentre() {
-        return { x: player.x, y: groundY - HEAD_CENTRE_FROM_FEET };
+        // Match the sprite's nudge so the bounce lands on the visual head.
+        return { x: player.x, y: groundY - HEAD_CENTRE_FROM_FEET + PLAYER_Y_OFFSET };
       }
 
       function tickBall(dt) {
@@ -1112,6 +1139,8 @@
           pulseCountryScore();
           spawnFloater(ball.x, ball.y - BALL_RADIUS - 4);
           ui.hint.style.opacity = "0";
+          // Kick off the contact → landing part of the header animation.
+          contactTimer = CONTACT_DUR + LAND_DUR;
         }
 
         // Ground = run ends.
@@ -1135,23 +1164,54 @@
         c.fillRect(X, Y, Math.max(1, X2 - X), Math.max(1, Y2 - Y));
       }
 
-      // A simple pixel goal sitting on the touchline behind the player.
+      // Goal near the top of the pitch, viewed from the field: crossbar +
+      // side posts at the back, net grid inside, open mouth toward the camera.
       function drawGoal(b) {
-        const gw = Math.round(vW * 0.34);
-        const gh = Math.round(vGround * 0.18) + 6;
+        const gw = Math.round(vW * 0.42);
+        const ph = vH - vPitchTop;
+        const gh = Math.round(ph * 0.16);
         const gx = Math.round(vW / 2 - gw / 2);
-        const gy = vGround - gh;
-        // Net fill + grid.
-        b.fillStyle = "rgba(225,240,232,0.10)";
-        b.fillRect(gx, gy, gw, gh);
-        b.fillStyle = "rgba(255,255,255,0.18)";
+        const gy = vPitchTop + Math.round(ph * 0.04);
+        // Net grid.
+        b.fillStyle = PALETTE.net;
         for (let x = gx; x <= gx + gw; x += 4) b.fillRect(x, gy, 1, gh);
-        for (let y = gy; y <= vGround; y += 4) b.fillRect(gx, y, gw, 1);
-        // Posts + crossbar.
-        b.fillStyle = "#f2f6f4";
-        b.fillRect(gx, gy, 2, gh);
-        b.fillRect(gx + gw - 2, gy, 2, gh);
-        b.fillRect(gx, gy, gw, 2);
+        for (let y = gy; y <= gy + gh; y += 4) b.fillRect(gx, y, gw, 1);
+        // Frame: crossbar + two posts (back of the goal) + goal-line at mouth.
+        b.fillStyle = PALETTE.goal;
+        b.fillRect(gx, gy, gw, 2);                 // crossbar
+        b.fillRect(gx, gy, 2, gh);                 // left post
+        b.fillRect(gx + gw - 2, gy, 2, gh);        // right post
+        b.fillStyle = PALETTE.goalDk;
+        b.fillRect(gx, gy + gh, gw, 1);            // shaded goal line
+      }
+
+      // Top-down field markings on the green pitch.
+      function drawPitchLines(b) {
+        const top = vPitchTop, bot = vH, h = bot - top, cx = vW / 2;
+        const L = PALETTE.line;
+        const box = (x, y, w, hh) => {       // 1px rectangle outline
+          b.fillStyle = L;
+          b.fillRect(Math.round(x), Math.round(y), Math.round(w), 1);
+          b.fillRect(Math.round(x), Math.round(y + hh), Math.round(w), 1);
+          b.fillRect(Math.round(x), Math.round(y), 1, Math.round(hh));
+          b.fillRect(Math.round(x + w), Math.round(y), 1, Math.round(hh));
+        };
+        // Penalty box + 6-yard box around the goal (top).
+        box(cx - vW * 0.30, top, vW * 0.60, h * 0.20);
+        box(cx - vW * 0.16, top, vW * 0.32, h * 0.09);
+        // Halfway line + centre circle + spot.
+        b.fillStyle = L;
+        b.fillRect(0, Math.round(top + h * 0.5), vW, 1);
+        b.strokeStyle = L;
+        b.lineWidth = 1;
+        b.beginPath();
+        b.arc(cx, top + h * 0.5, Math.round(vW * 0.13), 0, Math.PI * 2);
+        b.stroke();
+        b.fillRect(Math.round(cx), Math.round(top + h * 0.5), 1, 1);
+        // Bottom edge arc (the "D").
+        b.beginPath();
+        b.arc(cx, bot, Math.round(vW * 0.18), Math.PI, Math.PI * 2);
+        b.stroke();
       }
 
       // The price line for the chosen country, e.g. "1 USD = 1767 MXN".
@@ -1160,57 +1220,64 @@
         return rt ? `1 USD = ${rt.rate} ${rt.cur}` : "RIA MONEY TRANSFER";
       }
 
+      // True when the baked mobile backdrop should be used instead of the
+      // procedural pixel scene.
+      function useImageBg() {
+        return mobileMode && bgMobileImg.complete && bgMobileImg.naturalWidth > 0;
+      }
+
+      // Draw the mobile backdrop to fill the screen (cover: scale up, centre-
+      // crop so there are no bars), crisp.
+      function drawMobileBackground() {
+        const iw = bgMobileImg.naturalWidth, ih = bgMobileImg.naturalHeight;
+        const scale = Math.max(W / iw, H / ih);
+        const dw = iw * scale, dh = ih * scale;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(bgMobileImg, (W - dw) / 2, (H - dh) / 2, dw, dh);
+      }
+
       function drawBackground() {
         const b = bctx;
+        const bd = bands();
+        vPitchTop = bd.pitchTop;
 
-        // --- Sky strip behind the upper stands (theme-tinted) ---
-        b.fillStyle = bgTheme.sky[0][1];
-        b.fillRect(0, 0, vW, vGround);
+        // --- Sky behind the top band ---
+        b.fillStyle = PALETTE.sky;
+        b.fillRect(0, 0, vW, bd.pitchTop);
 
-        // --- Stands block + crowd ---
-        const standsBottom = Math.round(vH * 0.17);
-        b.fillStyle = "#241f38";
-        b.fillRect(0, 0, vW, standsBottom);
-        // Optional night sparkle in the stands sky.
-        if (stars.length) {
-          b.fillStyle = "rgba(255,255,255,0.7)";
-          for (const s of stars) b.fillRect(Math.round(s.x / PX), Math.round(s.y / PX), 1, 1);
-        }
+        // --- Stand backdrop + crowd ---
+        b.fillStyle = PALETTE.standDk;
+        b.fillRect(0, bd.crowdTop, vW, bd.crowdBottom - bd.crowdTop);
         for (const f of crowd) {
-          b.fillStyle = f.jersey;          // torso / shoulders
-          b.fillRect(f.x, f.y + 2, 4, 4);
-          b.fillStyle = "#e8b890";         // head
+          b.fillStyle = f.shirt;            // torso (3x3)
+          b.fillRect(f.x, f.y + 2, 3, 3);
+          b.fillStyle = f.skin;             // head (2x2)
           b.fillRect(f.x + 1, f.y, 2, 2);
         }
 
-        // --- Stadium wall between crowd and the pitch ---
-        b.fillStyle = "#1b2230";
-        b.fillRect(0, standsBottom, vW, vGround - standsBottom);
-        b.fillStyle = "#11131c";
-        b.fillRect(0, standsBottom, vW, 1);
+        // --- Barrier wall under the crowd ---
+        b.fillStyle = PALETTE.wall;
+        b.fillRect(0, bd.crowdBottom, vW, bd.barrierH);
+        b.fillStyle = PALETTE.wallDk;
+        b.fillRect(0, bd.crowdBottom, vW, 1);
+        b.fillRect(0, bd.crowdBottom + bd.barrierH - 1, vW, 1);
 
-        // --- Advertising board (just the bar here; the text + logo are
-        //     painted sharp in drawAdOverlay on a finer pixel grid). ---
-        adVH = Math.max(9, Math.round(vH * 0.052));
-        adVY = vGround - adVH;
+        // --- Advertising board bar (text + logo painted in drawAdOverlay) ---
+        adVY = bd.adY;
+        adVH = bd.adH;
         b.fillStyle = "#0b0e13";
         b.fillRect(0, adVY, vW, adVH);
-        b.fillStyle = "#3a4252";       // top + bottom rails
+        b.fillStyle = "#3a4252";          // rails
         b.fillRect(0, adVY - 1, vW, 1);
-        b.fillRect(0, vGround - 1, vW, 1);
+        b.fillRect(0, adVY + adVH, vW, 1);
 
-        // --- Pitch: vertical mowing stripes (theme greens) ---
+        // --- Pitch: fills from the ad row to the bottom; vertical mow stripes ---
         const stripeW = Math.max(6, Math.round(vW / 9));
         for (let x = 0, i = 0; x < vW; x += stripeW, i++) {
-          b.fillStyle = i % 2 ? bgTheme.grass[1] : bgTheme.grass[0];
-          b.fillRect(x, vGround, stripeW, vH - vGround);
+          b.fillStyle = i % 2 ? PALETTE.pitchDk : PALETTE.pitchLt;
+          b.fillRect(x, vPitchTop, stripeW, vH - vPitchTop);
         }
-
-        // --- Touchline marking ---
-        // (The goal is drawn in the foreground pass so it sits IN FRONT of the
-        //  ad board, which is composited between the backdrop and foreground.)
-        b.fillStyle = "#eef3f0";
-        b.fillRect(0, vGround, vW, 1);
+        drawPitchLines(b);
       }
 
       // Chunky pixel-art footballer in the country kit. Built from the same
@@ -1260,37 +1327,61 @@
         r(cx - R + 4, headCY - 4, 2 * R - 8, 5, "#1a1a1a");
       }
 
-      // Pixel ball — flat white disc with a few dark "pentagon" pixels, drawn
-      // into the low-res buffer (the arc comes out chunky once upscaled).
-      function drawBall() {
-        const b = bctx;
-        const bx = ball.x / PX, by = ball.y / PX;
-        const rad = Math.max(2, BALL_RADIUS / PX);
+      // Pick the player's frame each tick:
+      //   • after a header, a short timer plays frame 3 (contact) → 4 (land);
+      //   • otherwise, as the ball falls toward the head, crouch (1) → rise (2)
+      //     so the wind-up leads into the contact;
+      //   • idle (0) the rest of the time.
+      function updatePlayerAnim(dt) {
+        if (contactTimer > 0) {
+          contactTimer -= dt;
+          playerFrame = contactTimer > LAND_DUR ? 3 : 4;
+          return;
+        }
+        if (!alive) { playerFrame = 0; return; }
+        const gap = headCentre().y - ball.y; // >0 when the ball is above the head
+        if (ball.vy > 0 && gap > 0 && gap < WINDUP_DIST) {
+          playerFrame = gap > WINDUP_DIST * 0.5 ? 1 : 2; // crouch, then rising
+        } else {
+          playerFrame = 0; // idle
+        }
+      }
 
-        // Ground shadow — shrinks as the ball rises.
-        const heightFrac = Math.max(0, Math.min(1, (groundY - ball.y) / (H * 0.55)));
-        b.fillStyle = `rgba(0,0,0,${(0.3 * (1 - heightFrac * 0.6)).toFixed(2)})`;
-        b.beginPath();
-        b.ellipse(bx, vGround, rad * (1 - heightFrac * 0.4), Math.max(1, rad * 0.4), 0, 0, Math.PI * 2);
-        b.fill();
+      // Draw the player sprite (current `playerFrame`) straight onto the main
+      // canvas — NOT the low-res buffer — so it stays crisp. Scaled so the
+      // feet sit on groundY and the head-centre meets the ball-contact point.
+      function drawPlayerSprite() {
+        const img = PLAYER_FRAMES[playerFrame] || PLAYER_FRAMES[0];
+        if (!img || !img.complete || !img.naturalWidth) return;
+        // Base scale aligns the sprite's feet→head span to the physics span;
+        // PLAYER_SCALE then sizes it up, anchored at the head so the ball still
+        // contacts the head (the feet just extend lower onto the pitch).
+        const intrinsic = (SPR_FEET_FRAC - SPR_HEAD_FRAC) * SPR_H;
+        const scale = (HEAD_CENTRE_FROM_FEET / intrinsic) * PLAYER_SCALE;
+        const dw = SPR_W * scale;
+        const dh = SPR_H * scale;
+        const headY = groundY - HEAD_CENTRE_FROM_FEET; // ball-contact point
+        const dx = player.x - dw / 2;
+        const dy = headY - SPR_HEAD_FRAC * dh + PLAYER_Y_OFFSET; // nudged up
+        ctx.imageSmoothingEnabled = false; // crisp pixels (req. 5)
+        ctx.drawImage(img, dx, dy, dw, dh);
+      }
 
-        // Body.
-        b.fillStyle = "#f4f4f4";
-        b.beginPath();
-        b.arc(bx, by, rad, 0, Math.PI * 2);
-        b.fill();
-        // Edge ring.
-        b.strokeStyle = "rgba(0,0,0,0.45)";
-        b.lineWidth = 1;
-        b.beginPath();
-        b.arc(bx, by, rad, 0, Math.PI * 2);
-        b.stroke();
-        // Pentagon pixels.
-        b.fillStyle = "#1c1c1c";
-        b.fillRect(Math.round(bx) - 1, Math.round(by) - 1, 2, 2);
-        b.fillRect(Math.round(bx - rad + 1), Math.round(by + 1), 1, 1);
-        b.fillRect(Math.round(bx + rad - 2), Math.round(by - 1), 1, 1);
-        b.fillRect(Math.round(bx), Math.round(by + rad - 2), 1, 1);
+      // Football sprite — drawn crisp on the main canvas, sized to the physics
+      // ball diameter (so collisions still match), spun by ball.spin, with a
+      // soft ground shadow that shrinks as the ball rises.
+      function drawBallSprite() {
+        const diam = BALL_RADIUS * 2;
+        if (!ballImg.complete || !ballImg.naturalWidth) return;
+        const aspect = ballImg.naturalWidth / ballImg.naturalHeight; // ~1.8
+        const dh = diam * BALL_VISUAL_SCALE;
+        const dw = dh * aspect;
+        ctx.save();
+        ctx.translate(ball.x, ball.y);
+        ctx.rotate(ball.spin);
+        ctx.imageSmoothingEnabled = false; // crisp pixels
+        ctx.drawImage(ballImg, -dw / 2, -dh / 2, dw, dh);
+        ctx.restore();
       }
 
       // Largest "Press Start 2P" size (capped at basePx) that fits `text`
@@ -1371,26 +1462,35 @@
           tickPlayer(dt);
           tickBall(dt);
         }
+        updatePlayerAnim(dt);
         ctx.imageSmoothingEnabled = false;
         ctx.clearRect(0, 0, W, H);
 
-        // Pass 1 — backdrop (crowd, wall, pitch, ad bar) behind the ads.
-        bctx.clearRect(0, 0, vW, vH);
-        drawBackground();
-        ctx.drawImage(buf, 0, 0, vW, vH, 0, 0, W, H);
+        // Blur the background so the (crisp) player + ball pop forward.
+        ctx.filter = `blur(${BG_BLUR}px)`;
+        if (useImageBg()) {
+          // MOBILE: baked backdrop image (crowd + ads + goal + pitch).
+          drawMobileBackground();
+        } else {
+          // DESKTOP: procedural pixel scene.
+          // Pass 1 — backdrop (crowd, wall, pitch, ad bar) behind the ads.
+          bctx.clearRect(0, 0, vW, vH);
+          drawBackground();
+          ctx.drawImage(buf, 0, 0, vW, vH, 0, 0, W, H);
+          // Ad board text + logo — in front of the bar, behind goal + player.
+          drawAdOverlay();
+          // Pass 2 — pixel foreground (goal) composited on top of the ads.
+          bctx.clearRect(0, 0, vW, vH);
+          drawGoal(bctx);
+          ctx.imageSmoothingEnabled = false;
+          ctx.drawImage(buf, 0, 0, vW, vH, 0, 0, W, H);
+        }
+        ctx.filter = "none"; // everything from here stays sharp
 
-        // Ad board text + logo — sits in front of the bar but BEHIND the
-        // goal and player.
-        drawAdOverlay();
-
-        // Pass 2 — foreground (goal, player, ball) on a transparent buffer,
-        // composited on top of the ads.
-        bctx.clearRect(0, 0, vW, vH);
-        drawGoal(bctx);
-        drawPlayer(bctx, PX, player.x, groundY);
-        drawBall();
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(buf, 0, 0, vW, vH, 0, 0, W, H);
+        // Sprites drawn crisp on the main canvas: player first, ball on top so
+        // it reads in front of the forehead on contact. (HUD is DOM, on top.)
+        drawPlayerSprite();
+        drawBallSprite();
         requestAnimationFrame(loop);
       }
 
