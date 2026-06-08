@@ -49,11 +49,12 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: space-between;
+        justify-content: flex-end; /* title, byline + controls clustered at the bottom */
+        gap: 16px;
         /* poster.png shown as-is behind the country selection */
         background: url("poster.png") center / cover no-repeat;
         image-rendering: pixelated;
-        padding: 7vh 20px max(env(safe-area-inset-bottom, 0px), 7vh);
+        padding: 5vh 20px calc(58px + env(safe-area-inset-bottom, 0px)); /* clear the ticker */
         text-align: center;
       }
       .picker[hidden] { display: none; }
@@ -66,9 +67,9 @@
       .picker-title {
         font-family: "Press Start 2P", monospace;
         font-size: clamp(26px, 9vw, 42px);
-        color: #000000;
+        color: #ffffff;
         letter-spacing: 0.04em;
-        text-shadow: 0 2px 0 rgba(255, 255, 255, 0.45);
+        text-shadow: 0 3px 0 #0b1430, 0 0 12px rgba(0, 0, 0, 0.5);
       }
       .picker-bottom {
         width: 100%;
@@ -83,8 +84,8 @@
         font-family: "Press Start 2P", monospace;
         font-size: 8px;
         line-height: 1.7;
-        color: #000000;
-        text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+        color: #ffffff;
+        text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
       }
       /* Pixel-style dropdown (beveled blue panel). */
       .picker select {
@@ -122,6 +123,36 @@
         cursor: pointer;
       }
       .picker button:active { transform: translateY(1px); }
+      /* Scrolling standings ticker pinned to the bottom of the home screen. */
+      .home-ticker {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        overflow: hidden;
+        padding: 7px 0;
+        background: rgba(8, 10, 16, 0.72);
+        border-top: 2px solid var(--ui-outline);
+        white-space: nowrap;
+      }
+      .ticker-track {
+        display: inline-block;
+        white-space: nowrap;
+        font-family: "Press Start 2P", monospace;
+        font-size: 9px;
+        color: #fff;
+        will-change: transform;
+        animation: tickerScroll 22s linear infinite;
+      }
+      .ticker-track .tk-item { margin: 0 16px; }
+      .ticker-track .tk-flag { font-family: initial; }
+      .ticker-track b { color: var(--ui-gold); font-weight: normal; }
+      .ticker-track .tk-you b,
+      .ticker-track .tk-you { color: #ffd23a; }
+      @keyframes tickerScroll {
+        from { transform: translateX(0); }
+        to   { transform: translateX(-50%); }
+      }
 
       /* ---------------- game canvas + HUD ---------------- */
       .game { position: fixed; inset: 0; }
@@ -216,6 +247,9 @@
         border: none; /* bevel comes from .px-panel box-shadow */
       }
       .ctrl-btn:active { transform: translateY(1px); }
+      /* During the tilt practice, hide the HUD leaderboard + control buttons. */
+      .game.tut .leaderboard,
+      .game.tut .controls { display: none; }
       .ctrl-btn svg {
         width: 20px;
         height: 20px;
@@ -247,6 +281,9 @@
       .tut-phone { width: 56px; height: 56px; transition: transform 0.06s linear; }
       .tut-phone svg { width: 100%; height: 100%; display: block; shape-rendering: crispEdges; }
       .tut-text { margin-top: 18px; font-size: 12px; letter-spacing: 0.06em; }
+      /* Once the player has tilted, drop the phone + instruction. */
+      .tutorial.tilted .tut-phone,
+      .tutorial.tilted .tut-text { display: none; }
       #tutorial-start {
         margin-top: 28px;
         pointer-events: auto;
@@ -501,6 +538,9 @@
         <select id="country-select"></select>
         <button id="start-btn" type="button">Start playing</button>
       </div>
+      <div class="home-ticker">
+        <div class="ticker-track" id="ticker-track"></div>
+      </div>
     </div>
 
     <!-- Step 2: the game itself. -->
@@ -688,12 +728,13 @@
       let stars = []; // {x, y, r} in screen px — regenerated per run / resize
 
       // Session state.
-      let playerCountry = "MX";
+      let playerCountry = "AR";
       let headers = 0;   // successful headers this run
       let best = 0;
       let newBestThisRun = false; // beat the prior best during this run?
       let alive = false;
       let inTutorial = false;     // showing the tilt how-to-play demo?
+      let tilted = false;         // has the player tilted yet during the demo?
 
       // =================================================================
       // UI REFERENCES
@@ -707,6 +748,7 @@
         headers: document.getElementById("headers"),
         best: document.getElementById("best"),
         lbRows: document.getElementById("lb-rows"),
+        tickerTrack: document.getElementById("ticker-track"),
         btnSound: document.getElementById("btn-sound"),
         btnVibrate: document.getElementById("btn-vibrate"),
         btnPause: document.getElementById("btn-pause"),
@@ -737,6 +779,11 @@
         opt.textContent = `${flag}  ${name}`;
         if (code === playerCountry) opt.selected = true;
         ui.countrySelect.appendChild(opt);
+      });
+      // Keep the home leaderboard highlight in sync with the picked country.
+      ui.countrySelect.addEventListener("change", () => {
+        playerCountry = ui.countrySelect.value;
+        renderHomeTicker();
       });
 
       // Build leaderboard rows. `compact` → just the top 3, plus the player's
@@ -772,6 +819,21 @@
       // Live HUD leaderboard — compact top-3 (+ you), refreshed each header.
       function renderLeaderboard() {
         ui.lbRows.innerHTML = buildLeaderboardHTML(true);
+      }
+
+      // Home-screen scrolling standings ticker (full ranking, looping).
+      function renderHomeTicker() {
+        const ranked = COUNTRIES
+          .map(([code, flag, name]) => ({ code, flag, score: scores[code] }))
+          .sort((a, b) => b.score - a.score);
+        const items = ranked
+          .map(
+            (r, i) =>
+              `<span class="tk-item${r.code === playerCountry ? " tk-you" : ""}">` +
+              `${i + 1} <span class="tk-flag">${r.flag}</span> ${ABBR[r.code] || r.code} <b>${r.score}</b></span>`
+          )
+          .join("");
+        ui.tickerTrack.innerHTML = items + items; // duplicate → seamless loop
       }
 
       // End-of-run snapshot — full ranking on the game-over card.
@@ -1282,23 +1344,29 @@
           ball.vx = offset * BOUNCE_LATERAL;
           ball.vSpin = offset * 0.06;
 
-          setHeaders(headers + 1);
-          scores[playerCountry] = (scores[playerCountry] || 0) + 1;
-          renderLeaderboard();
-          pulseCountryScore();
-          spawnFloater(ball.x, ball.y - BALL_RADIUS - 4);
-          ui.hint.style.opacity = "0";
+          // Feedback always; scoring only counts in a real run, not practice.
           playHeaderSound();
-          if (vibrateOn && navigator.vibrate) navigator.vibrate(25); // haptic on header
-          // Flick to the header pose (frame 2) for a few frames.
-          contactTimer = HEADER_POSE_DUR;
+          if (vibrateOn && navigator.vibrate) navigator.vibrate(25);
+          contactTimer = HEADER_POSE_DUR; // flick to the header pose
+          if (!inTutorial) {
+            setHeaders(headers + 1);
+            scores[playerCountry] = (scores[playerCountry] || 0) + 1;
+            renderLeaderboard();
+            pulseCountryScore();
+            spawnFloater(ball.x, ball.y - BALL_RADIUS - 4);
+            ui.hint.style.opacity = "0";
+          }
         }
 
-        // Ground = run ends.
+        // Ball hits the ground.
         if (ball.y + BALL_RADIUS >= groundY) {
-          ball.y = groundY - BALL_RADIUS;
-          ball.vy = 0;
-          endGame();
+          if (inTutorial) {
+            resetForRun(); // practice: drop a fresh ball, keep going
+          } else {
+            ball.y = groundY - BALL_RADIUS;
+            ball.vy = 0;
+            endGame();
+          }
         }
       }
 
@@ -1702,15 +1770,22 @@
         lastT = now;
         if (!paused) {
           adTime += dt; // drives the ad-board slide swap
-          if (alive) {
+          if (alive || inTutorial) {
             tickPlayer(dt);
-            tickBall(dt);
-          } else if (inTutorial) {
-            tickPlayer(dt); // demo: player follows tilt, no ball yet
+            tickBall(dt); // practice mode keeps a ball falling too
+          }
+          if (inTutorial) {
             // Rotate the phone icon by the actual tilt (1:1, clamped) so it
             // matches how much the player is tilting / how the player moves.
             const deg = Math.max(-35, Math.min(35, tiltDelta));
             ui.tutPhone.style.transform = `rotate(${deg}deg)`;
+            // Once they've actually tilted, hide the instruction and just
+            // leave the Start button.
+            if (!tilted && Math.abs(tiltDelta) > 8) {
+              tilted = true;
+              ui.tutorial.classList.add("tilted");
+              ui.tutorialStart.hidden = false;
+            }
           }
           updatePlayerAnim(dt);
         }
@@ -1743,7 +1818,7 @@
         // Sprites drawn crisp on the main canvas: player first, ball on top so
         // it reads in front of the forehead on contact. (HUD is DOM, on top.)
         drawPlayerSprite();
-        if (!inTutorial) drawBallSprite(); // no ball during the how-to-play demo
+        drawBallSprite();
         requestAnimationFrame(loop);
       }
 
@@ -1755,13 +1830,19 @@
       // granted on mobile.)
       function startTutorial() {
         inTutorial = true;
+        tilted = false;
         player.x = W / 2;
         tiltZero = null; // calibrate rest angle to how they're holding it now
         tiltDelta = 0;
+        resetForRun();           // drop a practice ball
+        pickTheme();             // pick a backdrop for the practice scene
+        ui.game.classList.add("tut"); // hides leaderboard + controls (see CSS)
         ui.hint.style.opacity = "0";
         ui.tutorial.hidden = false;
+        ui.tutorial.classList.remove("tilted");
         ui.tutorialStart.hidden = true;
-        window.setTimeout(() => { ui.tutorialStart.hidden = false; }, 1800);
+        // Fallback: reveal Start after a bit even if they don't tilt.
+        window.setTimeout(() => { ui.tutorialStart.hidden = false; }, 2500);
       }
 
       ui.startBtn.addEventListener("click", async () => {
@@ -1784,6 +1865,7 @@
       ui.tutorialStart.addEventListener("click", () => {
         inTutorial = false;
         ui.tutorial.hidden = true;
+        ui.game.classList.remove("tut"); // restore leaderboard + controls
         startGame();
       });
 
@@ -1791,6 +1873,7 @@
 
       resize();
       renderLeaderboard();
+      renderHomeTicker();
       requestAnimationFrame(loop);
     </script>
   </body>
