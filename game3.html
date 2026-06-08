@@ -202,6 +202,49 @@
         .ctrl-btn svg { width: 17px; height: 17px; }
       }
 
+      /* How-to-play tilt demo overlay (mobile). Transparent so the player is
+         visible moving behind it; only the Start button is clickable. */
+      .tutorial {
+        position: absolute;
+        inset: 0;
+        z-index: 4;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding-top: 16vh;
+        pointer-events: none;
+        font-family: "Press Start 2P", monospace;
+        color: #fff;
+        text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
+      }
+      .tutorial[hidden] { display: none; }
+      .tut-phone { width: 56px; height: 56px; animation: tiltPhone 1.7s ease-in-out infinite; }
+      .tut-phone svg { width: 100%; height: 100%; display: block; shape-rendering: crispEdges; }
+      @keyframes tiltPhone {
+        0%, 100% { transform: rotate(-24deg); }
+        50%      { transform: rotate(24deg); }
+      }
+      .tut-text { margin-top: 18px; font-size: 12px; letter-spacing: 0.06em; }
+      #tutorial-start {
+        margin-top: 28px;
+        pointer-events: auto;
+        font-family: "Press Start 2P", monospace;
+        font-size: 11px;
+        text-transform: uppercase;
+        color: #1a1206;
+        padding: 12px 18px;
+        background: var(--btn-orange);
+        border: 3px solid var(--ui-outline);
+        box-shadow:
+          inset 3px 3px 0 0 #ffd9a8,
+          inset -3px -3px 0 0 var(--btn-orange-dk),
+          0 4px 0 rgba(0, 0, 0, 0.35);
+        cursor: pointer;
+        animation: tutBtnIn 0.3s ease-out;
+      }
+      #tutorial-start[hidden] { display: none; }
+      @keyframes tutBtnIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
       .hint {
         position: absolute;
         bottom: max(env(safe-area-inset-bottom, 0px), 24px);
@@ -452,6 +495,19 @@
 
       <div class="hint" id="hint">Tilt your phone (or ← → / mouse / touch) — keep the ball on your head</div>
 
+      <!-- How-to-play tilt demo (mobile, only when motion is allowed). -->
+      <div class="tutorial" id="tutorial" hidden>
+        <div class="tut-phone">
+          <svg viewBox="0 0 16 24">
+            <rect x="2" y="1" width="12" height="22" fill="#ffffff"/>
+            <rect x="3" y="3" width="10" height="16" fill="#16284f"/>
+            <rect x="7" y="20" width="2" height="2" fill="#16284f"/>
+          </svg>
+        </div>
+        <div class="tut-text">‹ TILT TO MOVE ›</div>
+        <button id="tutorial-start" type="button" hidden>Start playing</button>
+      </div>
+
       <div class="gameover" id="gameover" hidden>
         <div class="gameover-card" id="gameover-card">
           <div class="go-hero">
@@ -612,6 +668,7 @@
       let best = 0;
       let newBestThisRun = false; // beat the prior best during this run?
       let alive = false;
+      let inTutorial = false;     // showing the tilt how-to-play demo?
 
       // =================================================================
       // UI REFERENCES
@@ -627,6 +684,8 @@
         lbRows: document.getElementById("lb-rows"),
         btnSound: document.getElementById("btn-sound"),
         btnPause: document.getElementById("btn-pause"),
+        tutorial: document.getElementById("tutorial"),
+        tutorialStart: document.getElementById("tutorial-start"),
         hint: document.getElementById("hint"),
         gameover: document.getElementById("gameover"),
         gameoverCard: document.getElementById("gameover-card"),
@@ -1101,21 +1160,25 @@
       // Attach the orientation listener. iOS 13+ gates the sensor behind a
       // permission prompt that must be triggered from a user gesture, so this
       // is called from the Start button tap.
+      // Returns a Promise that resolves true if tilt is available + permitted.
       function enableTilt() {
-        if (tiltSetup) return;
-        const DOE = window.DeviceOrientationEvent;
-        if (!DOE) return; // device has no orientation sensor
-        const attach = () => {
-          window.addEventListener("deviceorientation", onOrientation);
-          tiltSetup = true;
-        };
-        if (typeof DOE.requestPermission === "function") {
-          DOE.requestPermission().then((state) => {
-            if (state === "granted") attach();
-          }).catch(() => {});
-        } else {
-          attach();
-        }
+        return new Promise((resolve) => {
+          if (tiltSetup) { resolve(true); return; }
+          const DOE = window.DeviceOrientationEvent;
+          if (!DOE) { resolve(false); return; } // no orientation sensor
+          const attach = () => {
+            window.addEventListener("deviceorientation", onOrientation);
+            tiltSetup = true;
+            resolve(true);
+          };
+          if (typeof DOE.requestPermission === "function") {
+            DOE.requestPermission()
+              .then((state) => (state === "granted" ? attach() : resolve(false)))
+              .catch(() => resolve(false));
+          } else {
+            attach(); // Android / desktop — no permission gate
+          }
+        });
       }
 
       // ---------------------- physics ----------------------
@@ -1603,6 +1666,8 @@
           if (alive) {
             tickPlayer(dt);
             tickBall(dt);
+          } else if (inTutorial) {
+            tickPlayer(dt); // demo: player follows tilt, no ball yet
           }
           updatePlayerAnim(dt);
         }
@@ -1635,25 +1700,45 @@
         // Sprites drawn crisp on the main canvas: player first, ball on top so
         // it reads in front of the forehead on contact. (HUD is DOM, on top.)
         drawPlayerSprite();
-        drawBallSprite();
+        if (!inTutorial) drawBallSprite(); // no ball during the how-to-play demo
         requestAnimationFrame(loop);
       }
 
       // =================================================================
       // BOOT
       // =================================================================
-      ui.startBtn.addEventListener("click", () => {
+      // Show the player + a tilting-phone demo; the player moves with real
+      // tilt. A Start button appears after a moment. (Only used when tilt is
+      // granted on mobile.)
+      function startTutorial() {
+        inTutorial = true;
+        player.x = W / 2;
+        ui.hint.style.opacity = "0";
+        ui.tutorial.hidden = false;
+        ui.tutorialStart.hidden = true;
+        window.setTimeout(() => { ui.tutorialStart.hidden = false; }, 1800);
+      }
+
+      ui.startBtn.addEventListener("click", async () => {
         playerCountry = ui.countrySelect.value;
         loadPlayerFrames(); // swap to the country's sprite set (e.g. Argentina)
         // This tap is a user gesture — the only context iOS lets us ask for
         // gyroscope access / start audio from.
-        enableTilt();
         initAudio();
         setCountryHeader();
         ui.picker.hidden = true;
         ui.game.hidden = false;
         resize();
         renderLeaderboard();
+        const tiltOk = await enableTilt();
+        // Tilt granted on a phone → show the how-to-play demo; else just play.
+        if (mobileMode && tiltOk) startTutorial();
+        else startGame();
+      });
+
+      ui.tutorialStart.addEventListener("click", () => {
+        inTutorial = false;
+        ui.tutorial.hidden = true;
         startGame();
       });
 
