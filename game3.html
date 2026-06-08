@@ -514,6 +514,7 @@
 
       <div class="controls">
         <button class="ctrl-btn px-panel" id="btn-sound" type="button" aria-label="Toggle sound"></button>
+        <button class="ctrl-btn px-panel" id="btn-vibrate" type="button" aria-label="Toggle vibration"></button>
         <button class="ctrl-btn px-panel" id="btn-pause" type="button" aria-label="Pause / resume"></button>
       </div>
 
@@ -707,6 +708,7 @@
         best: document.getElementById("best"),
         lbRows: document.getElementById("lb-rows"),
         btnSound: document.getElementById("btn-sound"),
+        btnVibrate: document.getElementById("btn-vibrate"),
         btnPause: document.getElementById("btn-pause"),
         tutorial: document.getElementById("tutorial"),
         tutPhone: document.getElementById("tut-phone"),
@@ -1287,6 +1289,7 @@
           spawnFloater(ball.x, ball.y - BALL_RADIUS - 4);
           ui.hint.style.opacity = "0";
           playHeaderSound();
+          if (vibrateOn && navigator.vibrate) navigator.vibrate(25); // haptic on header
           // Flick to the header pose (frame 2) for a few frames.
           contactTimer = HEADER_POSE_DUR;
         }
@@ -1626,8 +1629,9 @@
         ctx.drawImage(adBuf, 0, 0, aw, ah, 0, boardY, aw, boardH);
       }
 
-      // ---------------------- sound + pause controls ----------------------
+      // ---------------------- sound + vibrate + pause controls ----------------------
       let muted = false;
+      let vibrateOn = true;
       let paused = false;
       let audioCtx = null;
 
@@ -1641,9 +1645,14 @@
           '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="4" y="3" width="2" height="10"/><rect x="6" y="5" width="2" height="6"/><rect x="8" y="7" width="2" height="2"/></svg>',
         pause:
           '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="4" y="3" width="3" height="10"/><rect x="9" y="3" width="3" height="10"/></svg>',
+        vibeOn:
+          '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="6" y="2" width="4" height="12"/><rect x="3" y="5" width="1" height="6"/><rect x="4" y="6" width="1" height="4"/><rect x="12" y="5" width="1" height="6"/><rect x="11" y="6" width="1" height="4"/></svg>',
+        vibeOff:
+          '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="6" y="2" width="4" height="12"/><rect x="11" y="5" width="1" height="1"/><rect x="12" y="6" width="1" height="1"/><rect x="13" y="7" width="1" height="1"/><rect x="13" y="5" width="1" height="1"/><rect x="12" y="6" width="1" height="1"/><rect x="11" y="7" width="1" height="1"/></svg>',
       };
       function refreshControlIcons() {
         ui.btnSound.innerHTML = muted ? ICONS.soundOff : ICONS.soundOn;
+        ui.btnVibrate.innerHTML = vibrateOn ? ICONS.vibeOn : ICONS.vibeOff;
         ui.btnPause.innerHTML = paused ? ICONS.play : ICONS.pause;
       }
 
@@ -1673,6 +1682,11 @@
         initAudio();
         if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
         muted = !muted;
+        refreshControlIcons();
+      });
+      ui.btnVibrate.addEventListener("click", () => {
+        vibrateOn = !vibrateOn;
+        if (vibrateOn && navigator.vibrate) navigator.vibrate(25); // confirmation buzz
         refreshControlIcons();
       });
       ui.btnPause.addEventListener("click", () => {
