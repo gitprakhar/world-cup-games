@@ -821,6 +821,7 @@
       // scene, then overlay the player, ball, and the DOM HUD.
       const bgMobileImg = new Image();
       bgMobileImg.src = "background-mobile.png";
+      const bgBlurBuf = document.createElement("canvas"); // downscale buffer for the mobile blur
       const BALL_VISUAL_SCALE = 1.2; // ball drawn bigger than its hitbox, for looks
       const MOBILE_MAX_W = 600;   // ≤ this viewport width counts as "mobile"
       let mobileMode = false;     // set in resize()
@@ -1278,13 +1279,31 @@
       }
 
       // Draw the mobile backdrop to fill the screen (cover: scale up, centre-
-      // crop so there are no bars), crisp.
+      // crop so there are no bars). The blur is done by downscaling then
+      // upscaling with smoothing on — `ctx.filter` blur isn't supported on
+      // iOS Safari / many mobile webviews, so we avoid it here.
       function drawMobileBackground() {
         const iw = bgMobileImg.naturalWidth, ih = bgMobileImg.naturalHeight;
         const scale = Math.max(W / iw, H / ih);
         const dw = iw * scale, dh = ih * scale;
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(bgMobileImg, (W - dw) / 2, (H - dh) / 2, dw, dh);
+        const ox = (W - dw) / 2, oy = (H - dh) / 2;
+
+        if (BG_BLUR > 0) {
+          const f = Math.max(2, Math.round(BG_BLUR * 0.6)); // downscale = blur strength
+          const lw = Math.max(1, Math.round(W / f));
+          const lh = Math.max(1, Math.round(H / f));
+          bgBlurBuf.width = lw;
+          bgBlurBuf.height = lh;
+          const c2 = bgBlurBuf.getContext("2d");
+          c2.imageSmoothingEnabled = true;
+          c2.clearRect(0, 0, lw, lh);
+          c2.drawImage(bgMobileImg, ox / f, oy / f, dw / f, dh / f);
+          ctx.imageSmoothingEnabled = true;        // smooth upscale = blur
+          ctx.drawImage(bgBlurBuf, 0, 0, lw, lh, 0, 0, W, H);
+        } else {
+          ctx.imageSmoothingEnabled = false;
+          ctx.drawImage(bgMobileImg, ox, oy, dw, dh);
+        }
       }
 
       function drawBackground() {
@@ -1585,13 +1604,15 @@
         ctx.imageSmoothingEnabled = false;
         ctx.clearRect(0, 0, W, H);
 
-        // Blur the background so the (crisp) player + ball pop forward.
-        ctx.filter = `blur(${BG_BLUR}px)`;
         if (useImageBg()) {
           // MOBILE: baked backdrop image (crowd + ads + goal + pitch).
+          // Self-blurs via downscale/upscale (no ctx.filter — unsupported on
+          // iOS Safari / many mobile browsers).
           drawMobileBackground();
         } else {
-          // DESKTOP: procedural pixel scene.
+          // DESKTOP: procedural pixel scene, blurred with the canvas filter
+          // (supported on the desktop browsers this path runs on).
+          ctx.filter = `blur(${BG_BLUR}px)`;
           // Pass 1 — backdrop (crowd, wall, pitch, ad bar) behind the ads.
           bctx.clearRect(0, 0, vW, vH);
           drawBackground();
@@ -1603,8 +1624,8 @@
           drawGoal(bctx);
           ctx.imageSmoothingEnabled = false;
           ctx.drawImage(buf, 0, 0, vW, vH, 0, 0, W, H);
+          ctx.filter = "none";
         }
-        ctx.filter = "none"; // everything from here stays sharp
 
         // Sprites drawn crisp on the main canvas: player first, ball on top so
         // it reads in front of the forehead on contact. (HUD is DOM, on top.)
