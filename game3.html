@@ -798,15 +798,25 @@
       // ---- player sprite (frames 1, 2, 4 — frame 3 skipped) ----
       // Mapped to: 0 idle · 1 crouch · 2 contact. Edit FRAME_FILES to change
       // which PNGs are used / in what order.
-      const FRAME_FILES = [1, 2, 4];
+      const FRAME_FILES = [1, 2];
+      // Per-country sprite sets (prefix). Falls back to DEFAULT_SKIN otherwise.
+      const PLAYER_SKINS = { AR: "player-frames-ar" };
+      const DEFAULT_SKIN = "player-frames";
       const PLAYER_FRAMES = [];
       let playerFramesReady = 0;
-      for (const n of FRAME_FILES) {
-        const img = new Image();
-        img.onload = () => { playerFramesReady++; };
-        img.src = `player-frames${n}.png`;
-        PLAYER_FRAMES.push(img);
+      // (Re)load the frame set for the chosen country.
+      function loadPlayerFrames() {
+        const prefix = PLAYER_SKINS[playerCountry] || DEFAULT_SKIN;
+        PLAYER_FRAMES.length = 0;
+        playerFramesReady = 0;
+        for (const n of FRAME_FILES) {
+          const img = new Image();
+          img.onload = () => { playerFramesReady++; };
+          img.src = `${prefix}${n}.png`;
+          PLAYER_FRAMES.push(img);
+        }
       }
+      loadPlayerFrames(); // initial load for the default country
       let playerFrame = 0; // which frame to draw right now (idle by default)
 
       // Football sprite (swap football.png to re-skin). The ball fills the
@@ -841,10 +851,8 @@
       // Header animation tuning. The wind-up (crouch→rising) is driven by the
       // descending ball's distance to the head, so frame 3 (contact) lands on
       // the real bounce; afterwards a short timer plays frame 3 then 4 → idle.
-      const WINDUP_DIST = 150;    // px above the head where the wind-up begins
-      const CONTACT_DUR = 0.12;   // s holding frame 3 (contact) after a header
-      const LAND_DUR    = 0.20;   // s holding frame 4 (landing) after that
-      let contactTimer = 0;       // counts down through the post-contact frames
+      const HEADER_POSE_DUR = 0.07; // s — how long frame 2 shows on a header (~4 frames)
+      let contactTimer = 0;         // counts down the header pose
 
       // ---- pixel-art buffer ----
       // The whole scene is drawn into a tiny offscreen canvas in "virtual
@@ -1191,8 +1199,8 @@
           spawnFloater(ball.x, ball.y - BALL_RADIUS - 4);
           ui.hint.style.opacity = "0";
           playHeaderSound();
-          // Kick off the contact → landing part of the header animation.
-          contactTimer = CONTACT_DUR + LAND_DUR;
+          // Flick to the header pose (frame 2) for a few frames.
+          contactTimer = HEADER_POSE_DUR;
         }
 
         // Ground = run ends.
@@ -1402,18 +1410,15 @@
       //   • otherwise, as the ball falls toward the head, crouch (1) → rise (2)
       //     so the wind-up leads into the contact;
       //   • idle (0) the rest of the time.
+      // Frame 1 (idle) almost always; flick to frame 2 only for a few frames
+      // right when the ball is headed, then back to frame 1.
       function updatePlayerAnim(dt) {
         if (contactTimer > 0) {
           contactTimer -= dt;
-          // Frame 2 (contact) only at the bounce, then crouch recovery → idle.
-          playerFrame = contactTimer > LAND_DUR ? 2 : 1;
+          playerFrame = 1; // brief header pose
           return;
         }
-        if (!alive) { playerFrame = 0; return; }
-        const gap = headCentre().y - ball.y; // >0 when the ball is above the head
-        // Whole wind-up is the crouch (frame 1); the contact pose is reserved
-        // for the actual bounce above, so each phase is a distinct frame.
-        playerFrame = (ball.vy > 0 && gap > 0 && gap < WINDUP_DIST) ? 1 : 0;
+        playerFrame = 0; // idle
       }
 
       // Draw the player sprite (current `playerFrame`) straight onto the main
@@ -1639,6 +1644,7 @@
       // =================================================================
       ui.startBtn.addEventListener("click", () => {
         playerCountry = ui.countrySelect.value;
+        loadPlayerFrames(); // swap to the country's sprite set (e.g. Argentina)
         // This tap is a user gesture — the only context iOS lets us ask for
         // gyroscope access / start audio from.
         enableTilt();
