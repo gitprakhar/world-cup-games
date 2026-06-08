@@ -169,6 +169,39 @@
       .lb-score { color: var(--ui-gold); }
       .lb-row.you .lb-name { color: var(--ui-gold); }
 
+      /* Sound + play/pause controls (top-right), beveled pixel buttons. */
+      .controls {
+        position: absolute;
+        top: max(env(safe-area-inset-top, 0px), 12px);
+        right: 12px;
+        display: flex;
+        gap: 8px;
+        z-index: 3;
+      }
+      .ctrl-btn {
+        width: 38px;
+        height: 38px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        pointer-events: auto;
+        color: var(--ui-gold);
+        border: none; /* bevel comes from .px-panel box-shadow */
+      }
+      .ctrl-btn:active { transform: translateY(1px); }
+      .ctrl-btn svg {
+        width: 20px;
+        height: 20px;
+        display: block;
+        shape-rendering: crispEdges; /* keep the pixel icons hard-edged */
+      }
+      @media (max-width: 480px) {
+        .ctrl-btn { width: 32px; height: 32px; }
+        .ctrl-btn svg { width: 17px; height: 17px; }
+      }
+
       .hint {
         position: absolute;
         bottom: max(env(safe-area-inset-bottom, 0px), 24px);
@@ -412,6 +445,11 @@
         <div id="lb-rows"></div>
       </div>
 
+      <div class="controls">
+        <button class="ctrl-btn px-panel" id="btn-sound" type="button" aria-label="Toggle sound"></button>
+        <button class="ctrl-btn px-panel" id="btn-pause" type="button" aria-label="Pause / resume"></button>
+      </div>
+
       <div class="hint" id="hint">Tilt your phone (or ← → / mouse / touch) — keep the ball on your head</div>
 
       <div class="gameover" id="gameover" hidden>
@@ -587,6 +625,8 @@
         headers: document.getElementById("headers"),
         best: document.getElementById("best"),
         lbRows: document.getElementById("lb-rows"),
+        btnSound: document.getElementById("btn-sound"),
+        btnPause: document.getElementById("btn-pause"),
         hint: document.getElementById("hint"),
         gameover: document.getElementById("gameover"),
         gameoverCard: document.getElementById("gameover-card"),
@@ -732,7 +772,7 @@
 
       // ---- tuning ----
       const GRAVITY = 1300;              // px/s² — ball's downward acceleration
-      const BOUNCE_VY = 700;             // px/s — upward kick on every header
+      const BOUNCE_VY = 820;             // px/s — upward kick on every header
       const BOUNCE_LATERAL = 340;        // px/s — max sideways push from an off-centre hit
       const SIDE_RESTITUTION = 0.78;     // bounce energy retained off side walls
       const PLAYER_KEYBOARD_SPEED = 540; // px/s — keyboard movement
@@ -755,15 +795,16 @@
       const player = { x: 0 };
       const ball = { x: 0, y: 0, vx: 0, vy: 0, spin: 0, vSpin: 0 };
 
-      // ---- player sprite (5 separate frames) ----
-      // Header/jump sequence: 0 idle · 1 crouch · 2 rising · 3 contact · 4 land.
-      // Swap the player-frameN.png files to re-skin; nothing here is hardcoded.
+      // ---- player sprite (frames 1, 2, 4 — frame 3 skipped) ----
+      // Mapped to: 0 idle · 1 crouch · 2 contact. Edit FRAME_FILES to change
+      // which PNGs are used / in what order.
+      const FRAME_FILES = [1, 2, 4];
       const PLAYER_FRAMES = [];
       let playerFramesReady = 0;
-      for (let i = 1; i <= 5; i++) {
+      for (const n of FRAME_FILES) {
         const img = new Image();
         img.onload = () => { playerFramesReady++; };
-        img.src = `player-frame${i}.png`;
+        img.src = `player-frames${n}.png`;
         PLAYER_FRAMES.push(img);
       }
       let playerFrame = 0; // which frame to draw right now (idle by default)
@@ -772,6 +813,8 @@
       // image height, so its on-screen diameter = drawn height.
       const ballImg = new Image();
       ballImg.src = "football.png";
+      const ballPix = document.createElement("canvas"); // downscale step for chunkier pixels
+      const BALL_PIXELATE = 2.2;  // higher = chunkier ball pixels
 
       // Pre-rendered stadium backdrop used on phones (crowd + ad boards + goal
       // + pitch baked in). On mobile we draw this instead of the procedural
@@ -787,9 +830,10 @@
       // sprite is scaled so the feet land on `groundY` and the head-centre
       // lands on the existing ball-contact point — tweak the two fractions if
       // the head/feet don't line up perfectly.
-      const SPR_W = 96, SPR_H = 215;
-      const SPR_FEET_FRAC = 0.95; // feet position down the frame (0=top,1=bottom)
-      const SPR_HEAD_FRAC = 0.15; // head-centre position down the frame
+      const SPR_W = 96, SPR_H = 222;
+      const SPR_FEET_FRAC = 0.95;       // feet position down the frame (0=top,1=bottom)
+      const SPR_HEAD_FRAC = 0.15;       // head-centre position down the frame
+      const SPR_HEAD_RADIUS_FRAC = 0.10; // visual head radius as a fraction of frame height
       const PLAYER_SCALE = 2.5;   // size multiplier (anchored at the head)
       const PLAYER_Y_OFFSET = -70; // px to nudge the sprite up the frame
 
@@ -1092,8 +1136,14 @@
       }
 
       function headCentre() {
-        // Match the sprite's nudge so the bounce lands on the visual head.
-        return { x: player.x, y: groundY - HEAD_CENTRE_FROM_FEET + PLAYER_Y_OFFSET };
+        // The ball rests HEAD_RADIUS above this point. The sprite's visual head
+        // is bigger than that hitbox, so raise the collision centre by the
+        // difference — that lands the ball on the TOP of the visual head.
+        const intrinsic = (SPR_FEET_FRAC - SPR_HEAD_FRAC) * SPR_H;
+        const scale = (HEAD_CENTRE_FROM_FEET / intrinsic) * PLAYER_SCALE;
+        const visualHeadR = SPR_HEAD_RADIUS_FRAC * SPR_H * scale;
+        const spriteHeadY = groundY - HEAD_CENTRE_FROM_FEET + PLAYER_Y_OFFSET;
+        return { x: player.x, y: spriteHeadY - (visualHeadR - HEAD_RADIUS) };
       }
 
       function tickBall(dt) {
@@ -1139,6 +1189,7 @@
           pulseCountryScore();
           spawnFloater(ball.x, ball.y - BALL_RADIUS - 4);
           ui.hint.style.opacity = "0";
+          playHeaderSound();
           // Kick off the contact → landing part of the header animation.
           contactTimer = CONTACT_DUR + LAND_DUR;
         }
@@ -1335,16 +1386,15 @@
       function updatePlayerAnim(dt) {
         if (contactTimer > 0) {
           contactTimer -= dt;
-          playerFrame = contactTimer > LAND_DUR ? 3 : 4;
+          // Frame 2 (contact) only at the bounce, then crouch recovery → idle.
+          playerFrame = contactTimer > LAND_DUR ? 2 : 1;
           return;
         }
         if (!alive) { playerFrame = 0; return; }
         const gap = headCentre().y - ball.y; // >0 when the ball is above the head
-        if (ball.vy > 0 && gap > 0 && gap < WINDUP_DIST) {
-          playerFrame = gap > WINDUP_DIST * 0.5 ? 1 : 2; // crouch, then rising
-        } else {
-          playerFrame = 0; // idle
-        }
+        // Whole wind-up is the crouch (frame 1); the contact pose is reserved
+        // for the actual bounce above, so each phase is a distinct frame.
+        playerFrame = (ball.vy > 0 && gap > 0 && gap < WINDUP_DIST) ? 1 : 0;
       }
 
       // Draw the player sprite (current `playerFrame`) straight onto the main
@@ -1376,11 +1426,23 @@
         const aspect = ballImg.naturalWidth / ballImg.naturalHeight; // ~1.8
         const dh = diam * BALL_VISUAL_SCALE;
         const dw = dh * aspect;
+
+        // Downscale to a small buffer, then nearest-neighbour upscale so the
+        // ball reads as chunky pixels (matching the player's pixel size).
+        const sw = Math.max(1, Math.round(dw / BALL_PIXELATE));
+        const sh = Math.max(1, Math.round(dh / BALL_PIXELATE));
+        ballPix.width = sw;
+        ballPix.height = sh;
+        const t = ballPix.getContext("2d");
+        t.imageSmoothingEnabled = true; // clean downscale
+        t.clearRect(0, 0, sw, sh);
+        t.drawImage(ballImg, 0, 0, sw, sh);
+
         ctx.save();
         ctx.translate(ball.x, ball.y);
         ctx.rotate(ball.spin);
-        ctx.imageSmoothingEnabled = false; // crisp pixels
-        ctx.drawImage(ballImg, -dw / 2, -dh / 2, dw, dh);
+        ctx.imageSmoothingEnabled = false; // chunky upscale
+        ctx.drawImage(ballPix, 0, 0, sw, sh, -dw / 2, -dh / 2, dw, dh);
         ctx.restore();
       }
 
@@ -1452,17 +1514,74 @@
         ctx.drawImage(adBuf, 0, 0, aw, ah, 0, boardY, aw, boardH);
       }
 
+      // ---------------------- sound + pause controls ----------------------
+      let muted = false;
+      let paused = false;
+      let audioCtx = null;
+
+      // Tiny pixel icons (axis-aligned rects → crisp when scaled).
+      const ICONS = {
+        soundOn:
+          '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="2" y="6" width="3" height="4"/><rect x="5" y="5" width="1" height="6"/><rect x="6" y="4" width="1" height="8"/><rect x="7" y="3" width="1" height="10"/><rect x="10" y="6" width="1" height="4"/><rect x="12" y="4" width="1" height="8"/></svg>',
+        soundOff:
+          '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="2" y="6" width="3" height="4"/><rect x="5" y="5" width="1" height="6"/><rect x="6" y="4" width="1" height="8"/><rect x="7" y="3" width="1" height="10"/><rect x="10" y="5" width="1" height="1"/><rect x="11" y="6" width="1" height="1"/><rect x="12" y="7" width="1" height="1"/><rect x="13" y="8" width="1" height="1"/><rect x="13" y="5" width="1" height="1"/><rect x="12" y="6" width="1" height="1"/><rect x="11" y="7" width="1" height="1"/><rect x="10" y="8" width="1" height="1"/></svg>',
+        play:
+          '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="4" y="3" width="2" height="10"/><rect x="6" y="5" width="2" height="6"/><rect x="8" y="7" width="2" height="2"/></svg>',
+        pause:
+          '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="4" y="3" width="3" height="10"/><rect x="9" y="3" width="3" height="10"/></svg>',
+      };
+      function refreshControlIcons() {
+        ui.btnSound.innerHTML = muted ? ICONS.soundOff : ICONS.soundOn;
+        ui.btnPause.innerHTML = paused ? ICONS.play : ICONS.pause;
+      }
+
+      // Lazily create the audio context (must follow a user gesture).
+      function initAudio() {
+        if (audioCtx) return;
+        try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+        catch (e) { audioCtx = null; }
+      }
+      // Short blip on each header — self-contained, no audio files.
+      function playHeaderSound() {
+        if (muted || !audioCtx) return;
+        const t = audioCtx.currentTime;
+        const o = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        o.type = "square";
+        o.frequency.setValueAtTime(660, t);
+        o.frequency.exponentialRampToValueAtTime(990, t + 0.08);
+        g.gain.setValueAtTime(0.12, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
+        o.connect(g).connect(audioCtx.destination);
+        o.start(t);
+        o.stop(t + 0.14);
+      }
+
+      ui.btnSound.addEventListener("click", () => {
+        initAudio();
+        if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+        muted = !muted;
+        refreshControlIcons();
+      });
+      ui.btnPause.addEventListener("click", () => {
+        paused = !paused;
+        refreshControlIcons();
+      });
+      refreshControlIcons();
+
       // ---------------------- main loop ----------------------
       let lastT = performance.now();
       function loop(now) {
         const dt = Math.min((now - lastT) / 1000, 0.05);
         lastT = now;
-        adTime += dt; // drives the ad-board slide swap
-        if (alive) {
-          tickPlayer(dt);
-          tickBall(dt);
+        if (!paused) {
+          adTime += dt; // drives the ad-board slide swap
+          if (alive) {
+            tickPlayer(dt);
+            tickBall(dt);
+          }
+          updatePlayerAnim(dt);
         }
-        updatePlayerAnim(dt);
         ctx.imageSmoothingEnabled = false;
         ctx.clearRect(0, 0, W, H);
 
@@ -1500,8 +1619,9 @@
       ui.startBtn.addEventListener("click", () => {
         playerCountry = ui.countrySelect.value;
         // This tap is a user gesture — the only context iOS lets us ask for
-        // gyroscope access from.
+        // gyroscope access / start audio from.
         enableTilt();
+        initAudio();
         setCountryHeader();
         ui.picker.hidden = true;
         ui.game.hidden = false;
