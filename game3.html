@@ -47,56 +47,81 @@
         inset: 0;
         z-index: 10;
         display: flex;
+        flex-direction: column;
         align-items: center;
-        justify-content: center;
-        background: rgba(8, 10, 16, 0.85);
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-        padding: 20px;
+        justify-content: space-between;
+        /* poster.png shown as-is behind the country selection */
+        background: url("poster.png") center / cover no-repeat;
+        image-rendering: pixelated;
+        padding: 7vh 20px max(env(safe-area-inset-bottom, 0px), 7vh);
+        text-align: center;
       }
       .picker[hidden] { display: none; }
-      .picker-card {
-        background: #1a1d24;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 16px;
-        padding: 28px 28px 20px;
-        width: 100%;
-        max-width: 360px;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      .picker-head {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
       }
-      .picker-card h1 { margin: 0 0 6px; font-size: 22px; font-weight: 800; }
-      .picker-card p { margin: 0 0 18px; font-size: 13px; opacity: 0.7; }
-      .picker-card select {
+      .picker-title {
+        font-family: "Press Start 2P", monospace;
+        font-size: clamp(26px, 9vw, 42px);
+        color: #000000;
+        letter-spacing: 0.04em;
+        text-shadow: 0 2px 0 rgba(255, 255, 255, 0.45);
+      }
+      .picker-bottom {
         width: 100%;
-        padding: 12px 14px;
-        background: #0f1219;
+        max-width: 320px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .picker-sub {
+        margin: 0;
+        max-width: 300px;
+        font-family: "Press Start 2P", monospace;
+        font-size: 8px;
+        line-height: 1.7;
+        color: #000000;
+        text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+      }
+      /* Pixel-style dropdown (beveled blue panel). */
+      .picker select {
+        width: 100%;
+        font-family: "Press Start 2P", monospace;
+        font-size: 10px;
         color: #fff;
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        border-radius: 10px;
-        font-size: 16px;
-        font-family: inherit;
+        background-color: var(--ui-blue);
+        border: 3px solid var(--ui-outline);
+        box-shadow:
+          inset 3px 3px 0 0 var(--ui-blue-lt),
+          inset -3px -3px 0 0 var(--ui-blue-dk);
+        padding: 13px 30px 13px 12px;
         appearance: none;
         -webkit-appearance: none;
-        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' width='12' height='8'><path d='M1 1l5 5 5-5' stroke='%23fff' fill='none' stroke-width='1.5'/></svg>");
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' width='12' height='8'><path d='M1 1l5 5 5-5' stroke='%23fff' fill='none' stroke-width='2'/></svg>");
         background-repeat: no-repeat;
-        background-position: right 14px center;
-        margin-bottom: 14px;
-      }
-      .picker-card button {
-        width: 100%;
-        padding: 13px;
-        background: #ff6e14;
-        color: #000;
-        font-weight: 700;
-        font-size: 15px;
-        font-family: inherit;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        border: none;
-        border-radius: 10px;
+        background-position: right 12px center;
         cursor: pointer;
       }
-      .picker-card button:hover { background: #ff8033; }
+      /* Pixel-style start button (beveled orange). */
+      .picker button {
+        width: 100%;
+        font-family: "Press Start 2P", monospace;
+        font-size: 12px;
+        text-transform: uppercase;
+        color: #1a1206;
+        padding: 14px;
+        background: var(--btn-orange);
+        border: 3px solid var(--ui-outline);
+        box-shadow:
+          inset 3px 3px 0 0 #ffd9a8,
+          inset -3px -3px 0 0 var(--btn-orange-dk),
+          0 4px 0 rgba(0, 0, 0, 0.35);
+        cursor: pointer;
+      }
+      .picker button:active { transform: translateY(1px); }
 
       /* ---------------- game canvas + HUD ---------------- */
       .game { position: fixed; inset: 0; }
@@ -466,11 +491,13 @@
     </style>
   </head>
   <body>
-    <!-- Step 1: pick a country. -->
+    <!-- Step 1: pick a country (over the poster, no popup). -->
     <div class="picker" id="picker">
-      <div class="picker-card">
-        <h1>Pick your country</h1>
-        <p>Every header you score adds to your country's total on the leaderboard.</p>
+      <div class="picker-head">
+        <div class="picker-title">RIA CUP</div>
+        <p class="picker-sub">Pick your country — every header adds to its leaderboard total</p>
+      </div>
+      <div class="picker-bottom">
         <select id="country-select"></select>
         <button id="start-btn" type="button">Start playing</button>
       </div>
