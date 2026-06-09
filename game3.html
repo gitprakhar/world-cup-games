@@ -52,9 +52,9 @@
         justify-content: flex-end; /* title, byline + controls clustered at the bottom */
         gap: 16px;
         /* poster.png shown as-is behind the country selection */
-        background: url("poster.png") center / cover no-repeat;
+        background: url("poster2.png") center / cover no-repeat;
         image-rendering: pixelated;
-        padding: 5vh 20px calc(58px + env(safe-area-inset-bottom, 0px)); /* clear the ticker */
+        padding: 5vh 20px calc(80px + env(safe-area-inset-bottom, 0px));
         text-align: center;
       }
       .picker[hidden] { display: none; }
@@ -123,36 +123,28 @@
         cursor: pointer;
       }
       .picker button:active { transform: translateY(1px); }
-      /* Scrolling standings ticker pinned to the bottom of the home screen. */
-      .home-ticker {
-        position: absolute;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        overflow: hidden;
-        padding: 7px 0;
-        background: rgba(8, 10, 16, 0.72);
-        border-top: 2px solid var(--ui-outline);
-        white-space: nowrap;
-      }
-      .ticker-track {
-        display: inline-block;
-        white-space: nowrap;
+      /* Top-3 standings under the buttons on the home screen. */
+      .home-top3 {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        justify-content: center;
+        align-items: center;
+        gap: 14px;
+        width: 100%;
         font-family: "Press Start 2P", monospace;
-        font-size: 9px;
+        font-size: 8px;
         color: #fff;
-        will-change: transform;
-        animation: tickerScroll 22s linear infinite;
+        text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
       }
-      .ticker-track .tk-item { margin: 0 16px; }
-      .ticker-track .tk-flag { font-family: initial; }
-      .ticker-track b { color: var(--ui-gold); font-weight: normal; }
-      .ticker-track .tk-you b,
-      .ticker-track .tk-you { color: #ffd23a; }
-      @keyframes tickerScroll {
-        from { transform: translateX(0); }
-        to   { transform: translateX(-50%); }
+      .home-top3 .t3-row {
+        display: flex;
+        align-items: center;
+        gap: 5px;
       }
+      .home-top3 .t3-flag { font-family: initial; font-size: 12px; }
+      .home-top3 b { color: var(--ui-gold); font-weight: normal; }
+      .home-top3 .t3-you { color: var(--ui-gold); }
 
       /* ---------------- game canvas + HUD ---------------- */
       .game { position: fixed; inset: 0; }
@@ -270,7 +262,8 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        padding-top: 16vh;
+        justify-content: flex-end; /* info sits at the bottom of the screen */
+        padding: 0 20px calc(36px + env(safe-area-inset-bottom, 0px));
         pointer-events: none;
         font-family: "Press Start 2P", monospace;
         color: #fff;
@@ -532,16 +525,13 @@
     <!-- Step 1: pick a country (over the poster, no popup). -->
     <div class="picker" id="picker">
       <div class="picker-head">
-        <div class="picker-title">RIA CUP</div>
         <p class="picker-sub">Pick your country — every header adds to its leaderboard total</p>
       </div>
       <div class="picker-bottom">
         <select id="country-select"></select>
         <button id="start-btn" type="button">Next</button>
       </div>
-      <div class="home-ticker">
-        <div class="ticker-track" id="ticker-track"></div>
-      </div>
+      <div class="home-top3" id="home-top3"></div>
     </div>
 
     <!-- Step 2: the game itself. -->
@@ -749,7 +739,7 @@
         headers: document.getElementById("headers"),
         best: document.getElementById("best"),
         lbRows: document.getElementById("lb-rows"),
-        tickerTrack: document.getElementById("ticker-track"),
+        homeTop3: document.getElementById("home-top3"),
         btnSound: document.getElementById("btn-sound"),
         btnVibrate: document.getElementById("btn-vibrate"),
         btnPause: document.getElementById("btn-pause"),
@@ -784,7 +774,7 @@
       // Keep the home leaderboard highlight in sync with the picked country.
       ui.countrySelect.addEventListener("change", () => {
         playerCountry = ui.countrySelect.value;
-        renderHomeTicker();
+        renderHomeTop3();
       });
 
       // Build leaderboard rows. `compact` → just the top 3, plus the player's
@@ -822,19 +812,19 @@
         ui.lbRows.innerHTML = buildLeaderboardHTML(true);
       }
 
-      // Home-screen scrolling standings ticker (full ranking, looping).
-      function renderHomeTicker() {
-        const ranked = COUNTRIES
+      // Home-screen top-3 standings (static), highlighting the picked country.
+      function renderHomeTop3() {
+        const top = COUNTRIES
           .map(([code, flag, name]) => ({ code, flag, score: scores[code] }))
-          .sort((a, b) => b.score - a.score);
-        const items = ranked
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 3);
+        ui.homeTop3.innerHTML = top
           .map(
             (r, i) =>
-              `<span class="tk-item${r.code === playerCountry ? " tk-you" : ""}">` +
-              `${i + 1} <span class="tk-flag">${r.flag}</span> ${ABBR[r.code] || r.code} <b>${r.score}</b></span>`
+              `<div class="t3-row${r.code === playerCountry ? " t3-you" : ""}">` +
+              `${i + 1} <span class="t3-flag">${r.flag}</span> ${ABBR[r.code] || r.code} <b>${r.score}</b></div>`
           )
           .join("");
-        ui.tickerTrack.innerHTML = items + items; // duplicate → seamless loop
       }
 
       // End-of-run snapshot — full ranking on the game-over card.
@@ -995,7 +985,7 @@
       const SPR_HEAD_FRAC = 0.15;       // head-centre position down the frame
       const SPR_HEAD_RADIUS_FRAC = 0.10; // visual head radius as a fraction of frame height
       const PLAYER_SCALE = 2.5;   // size multiplier (anchored at the head)
-      const PLAYER_Y_OFFSET = -70; // px to nudge the sprite up the frame
+      const PLAYER_Y_OFFSET = -100; // px to nudge the sprite up the frame
 
       // Header animation tuning. The wind-up (crouch→rising) is driven by the
       // descending ball's distance to the head, so frame 3 (contact) lands on
@@ -1869,7 +1859,7 @@
 
       resize();
       renderLeaderboard();
-      renderHomeTicker();
+      renderHomeTop3();
       requestAnimationFrame(loop);
     </script>
   </body>
