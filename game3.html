@@ -1025,6 +1025,8 @@
       // scene, then overlay the player, ball, and the DOM HUD.
       const bgMobileImg = new Image();
       bgMobileImg.src = "background-mobile.png";
+      const shareBgImg = new Image();   // backdrop for the shareable score image
+      shareBgImg.src = "share-bg.png";
       const bgBlurBuf = document.createElement("canvas"); // downscale buffer for the mobile blur
       const BALL_VISUAL_SCALE = 1.2; // ball drawn bigger than its hitbox, for looks
       const MOBILE_MAX_W = 600;   // ≤ this viewport width counts as "mobile"
@@ -1283,10 +1285,19 @@
       }
 
       // Your site for the share deep link. CHANGE THIS to your real domain.
-      const SHARE_SITE = "https://riamoneytransfer.com";
+      const SHARE_SITE = "https://riamoneytransfer.com/ria-cup";
 
-      // Compose a 1080×1920 Instagram-Story PNG of the result on a solid
-      // background — score, country, the player sprite, and branding.
+      // Beveled blue pixel panel (same look as the game-over card).
+      function pxPanelOn(g, x, y, w, h) {
+        const b = 8;
+        g.fillStyle = "#0b1430"; g.fillRect(x - b, y - b, w + 2 * b, h + 2 * b); // outline
+        g.fillStyle = "#3a6fd0"; g.fillRect(x, y, w, h);                         // fill
+        g.fillStyle = "#6fa3f0"; g.fillRect(x, y, w, b); g.fillRect(x, y, b, h); // top-left
+        g.fillStyle = "#21408a"; g.fillRect(x, y + h - b, w, b); g.fillRect(x + w - b, y, b, h); // bottom-right
+      }
+
+      // Compose a 1080×1920 Instagram-Story PNG: share-bg.png behind a stats
+      // card (the same panel + figures we show on the game-over screen).
       function buildShareImage() {
         const W2 = 1080, H2 = 1920, cx = W2 / 2;
         const cv = document.createElement("canvas");
@@ -1296,46 +1307,63 @@
         g.imageSmoothingEnabled = false;
         g.textAlign = "center";
 
-        // Solid background + accent bands.
-        g.fillStyle = "#13325a";
-        g.fillRect(0, 0, W2, H2);
-        g.fillStyle = "#0b1430";
-        g.fillRect(0, 0, W2, 22);
-        g.fillRect(0, H2 - 22, W2, 22);
+        // Background: share-bg.png scaled to fill the width, anchored to the
+        // TOP so the "RIA CUP" title isn't cropped (only the lower pitch is).
+        if (shareBgImg.complete && shareBgImg.naturalWidth) {
+          const s = W2 / shareBgImg.naturalWidth;
+          g.drawImage(shareBgImg, 0, 0, W2, shareBgImg.naturalHeight * s);
+        } else {
+          g.fillStyle = "#13325a";
+          g.fillRect(0, 0, W2, H2);
+        }
 
         const entry = COUNTRIES.find(([code]) => code === playerCountry);
         const flag = entry ? entry[1] : "🏳️";
         const name = entry ? entry[2] : "";
 
-        // Title.
-        g.fillStyle = "#ffffff";
-        g.font = "90px 'Press Start 2P', monospace";
-        g.fillText("RIA CUP", cx, 240);
+        // Stats card.
+        const cardX = cx - 430, cardY = 600, cardW = 860, cardH = 1200;
+        pxPanelOn(g, cardX, cardY, cardW, cardH);
 
-        // Player sprite.
+        // Player sprite (idle frame) at the top of the card.
         const img = PLAYER_FRAMES[0];
         if (img && img.complete && img.naturalWidth) {
-          const ph = 740, pw = ph * (img.naturalWidth / img.naturalHeight);
-          g.drawImage(img, cx - pw / 2, 330, pw, ph);
+          const ph = 300, pw = ph * (img.naturalWidth / img.naturalHeight);
+          g.drawImage(img, cx - pw / 2, cardY + 36, pw, ph);
         }
 
-        // Score.
-        g.fillStyle = "#ffd23a";
-        g.font = "210px 'Press Start 2P', monospace";
-        g.fillText(String(headers), cx, 1330);
-        g.fillStyle = "#cde0ff";
-        g.font = "44px 'Press Start 2P', monospace";
-        g.fillText("HEADERS", cx, 1410);
-
-        // Country.
         g.fillStyle = "#ffffff";
-        g.font = "56px 'Press Start 2P', monospace";
-        g.fillText(`${flag} ${name.toUpperCase()}`, cx, 1560);
-
-        // Footer / attribution.
-        g.fillStyle = "#ffd23a";
         g.font = "40px 'Press Start 2P', monospace";
-        g.fillText("RIAMONEYTRANSFER.COM", cx, 1820);
+        g.fillText("FULL TIME", cx, 1010);
+
+        g.fillStyle = "#ffd23a";
+        g.font = "130px 'Press Start 2P', monospace";
+        g.fillText(String(headers), cx, 1150);
+        g.fillStyle = "#cde0ff";
+        g.font = "30px 'Press Start 2P', monospace";
+        g.fillText("HEADERS", cx, 1200);
+
+        g.fillStyle = "#ffffff";
+        g.font = "36px 'Press Start 2P', monospace";
+        g.fillText(`${flag} ${name.toUpperCase()}`, cx, 1290);
+
+        // Top-3 countries (player's row in gold).
+        g.fillStyle = "#cde0ff";
+        g.font = "24px 'Press Start 2P', monospace";
+        g.fillText("TOP COUNTRIES", cx, 1380);
+        const top = COUNTRIES
+          .map(([code, f, n]) => ({ code, f, score: scores[code] }))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 3);
+        g.font = "28px 'Press Start 2P', monospace";
+        top.forEach((r, i) => {
+          g.fillStyle = r.code === playerCountry ? "#ffd23a" : "#ffffff";
+          g.fillText(`${i + 1}  ${r.f} ${ABBR[r.code] || r.code}  ${r.score}`, cx, 1440 + i * 52);
+        });
+
+        g.fillStyle = "#ffd23a";
+        g.font = "24px 'Press Start 2P', monospace";
+        g.fillText("RIAMONEYTRANSFER.COM/RIA-CUP", cx, 1730);
         return cv;
       }
 
@@ -1362,7 +1390,7 @@
 
         const entry = COUNTRIES.find(([code]) => code === playerCountry);
         const name = entry ? entry[2] : "my country";
-        const url = `${SHARE_SITE}/?ref=share&country=${encodeURIComponent(playerCountry)}`;
+        const url = `${SHARE_SITE}?ref=share&country=${encodeURIComponent(playerCountry)}`;
         const text = `I scored ${headers} headers for ${name} in RIA CUP! ⚽`;
 
         try {
