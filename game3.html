@@ -524,9 +524,7 @@
   <body>
     <!-- Step 1: pick a country (over the poster, no popup). -->
     <div class="picker" id="picker">
-      <div class="picker-head">
-        <p class="picker-sub">Pick your country — every header adds to its leaderboard total</p>
-      </div>
+      <div class="picker-head"></div>
       <div class="picker-bottom">
         <select id="country-select"></select>
         <button id="start-btn" type="button">Next</button>
@@ -549,7 +547,7 @@
         <button class="ctrl-btn px-panel" id="btn-pause" type="button" aria-label="Pause / resume"></button>
       </div>
 
-      <div class="hint" id="hint">Tilt your phone (or ← → / mouse / touch) — keep the ball on your head</div>
+      <div class="hint" id="hint"></div>
 
       <!-- How-to-play tilt demo (mobile, only when motion is allowed). -->
       <div class="tutorial" id="tutorial" hidden>
@@ -985,7 +983,7 @@
       const SPR_HEAD_FRAC = 0.15;       // head-centre position down the frame
       const SPR_HEAD_RADIUS_FRAC = 0.10; // visual head radius as a fraction of frame height
       const PLAYER_SCALE = 2.5;   // size multiplier (anchored at the head)
-      const PLAYER_Y_OFFSET = -100; // px to nudge the sprite up the frame
+      const PLAYER_Y_OFFSET = -30; // px to nudge the sprite up the frame
 
       // Header animation tuning. The wind-up (crouch→rising) is driven by the
       // descending ball's distance to the head, so frame 3 (contact) lands on
