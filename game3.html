@@ -964,8 +964,8 @@
       // approaches BALL_SPEED_MAX with shrinking steps — so it never keeps
       // accelerating into the impossible. (Time-scales the ball only; the
       // trajectory shape stays the same, just quicker.)
-      const BALL_SPEED_MAX = 1.8; // hard cap, e.g. 1.8 = 80% faster than base
-      const BALL_SPEED_K = 0.35;  // higher = reaches the cap sooner
+      const BALL_SPEED_MAX = 1.6; // hard cap, e.g. 1.6 = 60% faster than base
+      const BALL_SPEED_K = 0.18;  // higher = reaches the cap sooner
       function ballSpeedMult() {
         const level = Math.floor(headers / 10);
         return BALL_SPEED_MAX - (BALL_SPEED_MAX - 1) * Math.exp(-BALL_SPEED_K * level);
