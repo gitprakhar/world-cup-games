@@ -499,6 +499,22 @@
         cursor: pointer;
       }
       .gameover-card button:active { transform: translateY(1px); }
+      /* Share button — green, with the +100 bonus highlighted. */
+      .gameover-card .go-share {
+        margin-top: 14px;
+        color: #04220f;
+        background: #2faf5a;
+        box-shadow:
+          inset 3px 3px 0 0 #79e0a0,
+          inset -3px -3px 0 0 #1d7a3c,
+          0 4px 0 rgba(0, 0, 0, 0.35);
+      }
+      .gameover-card .go-share .share-bonus {
+        color: #fff3a0;
+        animation: bonusPulse 0.9s ease-in-out infinite;
+      }
+      @keyframes bonusPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+      .gameover-card .go-share:disabled { opacity: 0.6; cursor: default; }
 
       /* End-of-run leaderboard — same beveled-inset look as the HUD board. */
       .gameover-card .gameover-lb {
@@ -604,6 +620,7 @@
             <div class="gameover-lb-title">🌎 Leaderboard</div>
             <div id="gameover-lb-rows"></div>
           </div>
+          <button id="share-btn" class="go-share" type="button">Share <span class="share-bonus">+100</span></button>
           <button id="play-again" type="button">Play again</button>
         </div>
       </div>
@@ -782,6 +799,7 @@
         goBestBadge: document.getElementById("go-best-badge"),
         finalScore: document.getElementById("final-score"),
         playAgain: document.getElementById("play-again"),
+        shareBtn: document.getElementById("share-btn"),
         gameoverLbRows: document.getElementById("gameover-lb-rows"),
         countryHeader: document.getElementById("country-header"),
         headerFlag: document.getElementById("header-flag"),
@@ -941,6 +959,17 @@
       const BOUNCE_LATERAL = 340;        // px/s — max sideways push from an off-centre hit
       const SIDE_RESTITUTION = 0.78;     // bounce energy retained off side walls
       const PLAYER_KEYBOARD_SPEED = 540; // px/s — keyboard movement
+
+      // Ball gets faster every 10 points, but on an ease-out curve that
+      // approaches BALL_SPEED_MAX with shrinking steps — so it never keeps
+      // accelerating into the impossible. (Time-scales the ball only; the
+      // trajectory shape stays the same, just quicker.)
+      const BALL_SPEED_MAX = 1.8; // hard cap, e.g. 1.8 = 80% faster than base
+      const BALL_SPEED_K = 0.35;  // higher = reaches the cap sooner
+      function ballSpeedMult() {
+        const level = Math.floor(headers / 10);
+        return BALL_SPEED_MAX - (BALL_SPEED_MAX - 1) * Math.exp(-BALL_SPEED_K * level);
+      }
       const POINTER_LERP = 14;           // smoothing factor for mouse/touch follow
       const TILT_MAX_SPEED = 640;        // px/s — speed at full tilt
       const TILT_FULL_DEG = 22;          // tilt angle (deg from rest) for full speed
@@ -1243,9 +1272,41 @@
         ui.goBestBadge.hidden = !newBestThisRun;
         drawCardPlayer();
 
+        // Reset the share bonus for this game-over.
+        sharedThisRun = false;
+        ui.shareBtn.disabled = false;
+        ui.shareBtn.innerHTML = 'Share <span class="share-bonus">+100</span>';
+
         renderGameoverLeaderboard();
         ui.gameover.hidden = false;
         animateCount(ui.finalScore, headers);
+      }
+
+      // Share → award +100 to the player's country (once per game-over).
+      let sharedThisRun = false;
+      function shareScore() {
+        if (sharedThisRun) return;
+        sharedThisRun = true;
+
+        const entry = COUNTRIES.find(([code]) => code === playerCountry);
+        const flag = entry ? entry[1] : "🏳️";
+        const name = entry ? entry[2] : "my country";
+        const msg = `I scored ${headers} headers for ${name} in RIA CUP! ⚽`;
+        if (navigator.share) {
+          navigator.share({ title: "RIA CUP", text: msg, url: location.href }).catch(() => {});
+        } else if (navigator.clipboard) {
+          navigator.clipboard.writeText(`${msg} ${location.href}`).catch(() => {});
+        }
+
+        // Reward the country's leaderboard total and refresh everything.
+        scores[playerCountry] = (scores[playerCountry] || 0) + 100;
+        renderGameoverLeaderboard();
+        renderLeaderboard();
+        renderHomeTop3();
+        ui.goRank.innerHTML = `${flag} ${name} is <b>#${countryRank(playerCountry)}</b> in the world`;
+
+        ui.shareBtn.innerHTML = "Shared ✓ +100";
+        ui.shareBtn.disabled = true;
       }
 
       // ---------------------- input ----------------------
@@ -1347,10 +1408,13 @@
       }
 
       function tickBall(dt) {
-        ball.vy += GRAVITY * dt;
-        ball.x += ball.vx * dt;
-        ball.y += ball.vy * dt;
-        ball.spin += ball.vSpin * dt + ball.vx * dt * 0.008;
+        // Speed ramp: practice stays at base speed (headers=0); a real run
+        // speeds up every 10 points along the ease-out curve.
+        const sdt = dt * ballSpeedMult();
+        ball.vy += GRAVITY * sdt;
+        ball.x += ball.vx * sdt;
+        ball.y += ball.vy * sdt;
+        ball.spin += ball.vSpin * sdt + ball.vx * sdt * 0.008;
 
         // Side walls.
         if (ball.x - BALL_RADIUS < 0) {
@@ -1908,6 +1972,7 @@
         startGame();
       });
 
+      ui.shareBtn.addEventListener("click", shareScore);
       ui.playAgain.addEventListener("click", () => startGame());
 
       resize();
