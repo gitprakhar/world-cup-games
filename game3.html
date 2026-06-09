@@ -813,8 +813,10 @@
         headerScore: document.getElementById("header-score"),
       };
 
-      // Populate the dropdown.
-      COUNTRIES.forEach(([code, flag, name]) => {
+      // Populate the dropdown — only the countries with player kits for now.
+      // (The leaderboard still shows every country in COUNTRIES.)
+      const SELECTABLE = ["AR", "CL", "MX"];
+      COUNTRIES.filter(([code]) => SELECTABLE.includes(code)).forEach(([code, flag, name]) => {
         const opt = document.createElement("option");
         opt.value = code;
         opt.textContent = `${flag}  ${name}`;
@@ -1000,7 +1002,7 @@
       // which PNGs are used / in what order.
       const FRAME_FILES = [1, 2];
       // Per-country sprite sets (prefix). Falls back to DEFAULT_SKIN otherwise.
-      const PLAYER_SKINS = { AR: "player-frames-ar", CL: "player-frames-cl" };
+      const PLAYER_SKINS = { AR: "player-frames-ar", CL: "player-frames-cl", MX: "player-frames-mx" };
       const DEFAULT_SKIN = "player-frames";
       const PLAYER_FRAMES = [];
       let playerFramesReady = 0;
