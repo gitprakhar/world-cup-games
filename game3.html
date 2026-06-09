@@ -52,7 +52,7 @@
         justify-content: flex-end; /* title, byline + controls clustered at the bottom */
         gap: 16px;
         /* poster.png shown as-is behind the country selection */
-        background: url("poster2.png") center / cover no-repeat;
+        background: url("poster3.png") center / cover no-repeat;
         image-rendering: pixelated;
         padding: 5vh 20px calc(80px + env(safe-area-inset-bottom, 0px));
         text-align: center;
@@ -296,6 +296,30 @@
       }
       #tutorial-start[hidden] { display: none; }
       @keyframes tutBtnIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+      /* Big pixel 3·2·1 countdown at the start of a run. */
+      .countdown {
+        position: absolute;
+        inset: 0;
+        z-index: 8;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+        background: rgba(8, 10, 16, 0.45); /* dim the scene so the number reads */
+        font-family: "Press Start 2P", monospace;
+        font-size: clamp(80px, 30vw, 180px);
+        color: var(--ui-gold);
+        text-shadow: 0 6px 0 #0b1430, 0 0 24px rgba(0, 0, 0, 0.6);
+      }
+      .countdown[hidden] { display: none; }
+      .countdown.pop { animation: countPop 0.7s ease-out; }
+      @keyframes countPop {
+        0%   { transform: scale(0.4); opacity: 0; }
+        25%  { transform: scale(1.18); opacity: 1; }
+        70%  { transform: scale(1); opacity: 1; }
+        100% { transform: scale(0.85); opacity: 0.15; }
+      }
 
       .hint {
         position: absolute;
@@ -549,6 +573,8 @@
 
       <div class="hint" id="hint"></div>
 
+      <div class="countdown" id="countdown" hidden>3</div>
+
       <!-- How-to-play tilt demo (mobile, only when motion is allowed). -->
       <div class="tutorial" id="tutorial" hidden>
         <div class="tut-phone" id="tut-phone">
@@ -724,6 +750,7 @@
       let alive = false;
       let inTutorial = false;     // showing the tilt how-to-play demo?
       let tilted = false;         // has the player tilted yet during the demo?
+      let counting = false;       // 3·2·1 countdown in progress?
 
       // =================================================================
       // UI REFERENCES
@@ -741,6 +768,7 @@
         btnSound: document.getElementById("btn-sound"),
         btnVibrate: document.getElementById("btn-vibrate"),
         btnPause: document.getElementById("btn-pause"),
+        countdown: document.getElementById("countdown"),
         tutorial: document.getElementById("tutorial"),
         tutPhone: document.getElementById("tut-phone"),
         tutorialStart: document.getElementById("tutorial-start"),
@@ -1131,15 +1159,42 @@
       function startGame() {
         setHeaders(0);
         newBestThisRun = false;
-        resetForRun();
+        resetForRun(); // ball waits off-screen at the top during the countdown
         pickTheme();
         // Recapture the resting tilt angle so however the phone is held now
         // becomes centre for this run.
         tiltZero = null;
         tiltDelta = 0;
-        alive = true;
-        ui.hint.style.opacity = "0.65";
         ui.gameover.hidden = true;
+        startCountdown(); // 3·2·1, then the ball drops
+      }
+
+      // Big pixel 3·2·1 before play begins. The ball only starts falling
+      // (alive = true) once it finishes.
+      function startCountdown() {
+        alive = false;
+        counting = true;
+        let n = 3;
+        const show = (v) => {
+          ui.countdown.textContent = v;
+          ui.countdown.hidden = false;
+          ui.countdown.classList.remove("pop");
+          void ui.countdown.offsetWidth; // restart the pop animation
+          ui.countdown.classList.add("pop");
+        };
+        show(n);
+        const step = () => {
+          n -= 1;
+          if (n >= 1) {
+            show(n);
+            window.setTimeout(step, 700);
+          } else {
+            ui.countdown.hidden = true;
+            counting = false;
+            alive = true;
+          }
+        };
+        window.setTimeout(step, 700);
       }
 
       // Render the actual player sprite (idle frame of the chosen country)
