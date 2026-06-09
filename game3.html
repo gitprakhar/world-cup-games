@@ -1282,31 +1282,114 @@
         animateCount(ui.finalScore, headers);
       }
 
-      // Share → award +100 to the player's country (once per game-over).
-      let sharedThisRun = false;
-      function shareScore() {
-        if (sharedThisRun) return;
-        sharedThisRun = true;
+      // Your site for the share deep link. CHANGE THIS to your real domain.
+      const SHARE_SITE = "https://riamoneytransfer.com";
+
+      // Compose a 1080×1920 Instagram-Story PNG of the result on a solid
+      // background — score, country, the player sprite, and branding.
+      function buildShareImage() {
+        const W2 = 1080, H2 = 1920, cx = W2 / 2;
+        const cv = document.createElement("canvas");
+        cv.width = W2;
+        cv.height = H2;
+        const g = cv.getContext("2d");
+        g.imageSmoothingEnabled = false;
+        g.textAlign = "center";
+
+        // Solid background + accent bands.
+        g.fillStyle = "#13325a";
+        g.fillRect(0, 0, W2, H2);
+        g.fillStyle = "#0b1430";
+        g.fillRect(0, 0, W2, 22);
+        g.fillRect(0, H2 - 22, W2, 22);
 
         const entry = COUNTRIES.find(([code]) => code === playerCountry);
         const flag = entry ? entry[1] : "🏳️";
-        const name = entry ? entry[2] : "my country";
-        const msg = `I scored ${headers} headers for ${name} in RIA CUP! ⚽`;
-        if (navigator.share) {
-          navigator.share({ title: "RIA CUP", text: msg, url: location.href }).catch(() => {});
-        } else if (navigator.clipboard) {
-          navigator.clipboard.writeText(`${msg} ${location.href}`).catch(() => {});
+        const name = entry ? entry[2] : "";
+
+        // Title.
+        g.fillStyle = "#ffffff";
+        g.font = "90px 'Press Start 2P', monospace";
+        g.fillText("RIA CUP", cx, 240);
+
+        // Player sprite.
+        const img = PLAYER_FRAMES[0];
+        if (img && img.complete && img.naturalWidth) {
+          const ph = 740, pw = ph * (img.naturalWidth / img.naturalHeight);
+          g.drawImage(img, cx - pw / 2, 330, pw, ph);
         }
 
-        // Reward the country's leaderboard total and refresh everything.
+        // Score.
+        g.fillStyle = "#ffd23a";
+        g.font = "210px 'Press Start 2P', monospace";
+        g.fillText(String(headers), cx, 1330);
+        g.fillStyle = "#cde0ff";
+        g.font = "44px 'Press Start 2P', monospace";
+        g.fillText("HEADERS", cx, 1410);
+
+        // Country.
+        g.fillStyle = "#ffffff";
+        g.font = "56px 'Press Start 2P', monospace";
+        g.fillText(`${flag} ${name.toUpperCase()}`, cx, 1560);
+
+        // Footer / attribution.
+        g.fillStyle = "#ffd23a";
+        g.font = "40px 'Press Start 2P', monospace";
+        g.fillText("RIAMONEYTRANSFER.COM", cx, 1820);
+        return cv;
+      }
+
+      // Client-side reward (once per game-over) + refresh the boards.
+      function awardShareBonus() {
         scores[playerCountry] = (scores[playerCountry] || 0) + 100;
         renderGameoverLeaderboard();
         renderLeaderboard();
         renderHomeTop3();
+        const entry = COUNTRIES.find(([code]) => code === playerCountry);
+        const flag = entry ? entry[1] : "🏳️";
+        const name = entry ? entry[2] : "your country";
         ui.goRank.innerHTML = `${flag} ${name} is <b>#${countryRank(playerCountry)}</b> in the world`;
-
         ui.shareBtn.innerHTML = "Shared ✓ +100";
-        ui.shareBtn.disabled = true;
+      }
+
+      // Share the result: screenshot PNG + deep link via the Web Share sheet,
+      // with fallbacks. Awards +100 once per game-over.
+      let sharedThisRun = false;
+      async function shareScore() {
+        if (sharedThisRun) return;
+        sharedThisRun = true;
+        ui.shareBtn.disabled = true; // guard against double-taps during the async work
+
+        const entry = COUNTRIES.find(([code]) => code === playerCountry);
+        const name = entry ? entry[2] : "my country";
+        const url = `${SHARE_SITE}/?ref=share&country=${encodeURIComponent(playerCountry)}`;
+        const text = `I scored ${headers} headers for ${name} in RIA CUP! ⚽`;
+
+        try {
+          if (document.fonts && document.fonts.ready) await document.fonts.ready;
+          const cv = buildShareImage();
+          const blob = await new Promise((res) => cv.toBlob(res, "image/png"));
+          const file = blob ? new File([blob], "ria-cup-score.png", { type: "image/png" }) : null;
+
+          if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], text, url, title: "RIA CUP" });
+          } else if (navigator.share) {
+            await navigator.share({ text, url, title: "RIA CUP" }); // link only (no file support)
+          } else {
+            if (blob) { // last resort: save the PNG + copy the link
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(blob);
+              a.download = "ria-cup-score.png";
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+            }
+            if (navigator.clipboard) navigator.clipboard.writeText(`${text} ${url}`).catch(() => {});
+          }
+        } catch (e) {
+          /* user cancelled or share failed — still grant the reward */
+        }
+        awardShareBonus();
       }
 
       // ---------------------- input ----------------------
